@@ -245,11 +245,11 @@ static void lcd_start(void)
 //[rmv]
 void draw_background(void)
 {
-	/* Select the LCD Background Layer  */
-	BSP_LCD_SelectLayer(0);
-	BSP_LCD_SetTextColor(LCD_COLOR_DARKGREY);
+  /* Select the LCD Background Layer  */
+  BSP_LCD_SelectLayer(0);
+  BSP_LCD_SetTextColor(LCD_COLOR_DARKGREY);
 
-	/* Draw simple grid */
+  /* Draw simple grid */
   BSP_LCD_DrawVLine(90, 0, LCD_Y_SIZE);
   BSP_LCD_DrawHLine(0, 68, 90);
   BSP_LCD_DrawHLine(0, 136, 90);
@@ -259,22 +259,37 @@ void draw_background(void)
   BSP_LCD_SetTextColor(LCD_COLOR_GREEN);
   BSP_LCD_SetFont(&Font16);
   BSP_LCD_DisplayStringAt(90, LCD_Y_SIZE / 2, (uint8_t*) "Place for temperature plot", CENTER_MODE);
-	
-	//select Foreground Layer
-	BSP_LCD_SelectLayer(1);
+
+  /* Select the LCD Foreground Layer */
+  BSP_LCD_SelectLayer(1);
 }
 
-void display_measurement(int id, double measurement) {
-  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-  BSP_LCD_SetFont(&Font16);
+void update_sensor_display(int id, double measurement) {
+  /* Display id of sensor */
+  BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
+  BSP_LCD_SetFont(&Font12);
 
-  char id_buf[] = {};
+  char id_buf[] = {0};
   sprintf(id_buf, "%d", id);
   BSP_LCD_DisplayStringAt(40, 10 + (id - 1) * 68, (uint8_t*) id_buf, LEFT_MODE);
 
-  char temp_buf[] = {};
+  /* Clear line of previous measurment */
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(40, 34 + (id - 1) * 68, 16, 40); // check those values
+
+  /* Display value of latest measurement */
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+  BSP_LCD_SetFont(&Font16);
+
+  char temp_buf[] = {0};
   sprintf(temp_buf, "%d", measurement);
   BSP_LCD_DisplayStringAt(40, 34 + (id - 1) * 68, (uint8_t*) temp_buf, LEFT_MODE);
+}
+
+void clear_sensor_display(int id) {
+  /* Clear one quarter if sensor goes away */
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(0, 1 + (id - 1) * 68, 89, 67);
 }
 
 static TS_StateTypeDef  TS_State;
