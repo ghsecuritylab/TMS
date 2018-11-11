@@ -260,7 +260,7 @@ void draw_background(void)
   BSP_LCD_SelectLayer(1);
 }
 
-void update_sensor_display(int id, int mes1, int mes2)
+void update_sensor_display(int id, int temperatureInteger, int temperatureDecimal)
 {
   /* Display id of sensor */
   BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
@@ -279,9 +279,9 @@ void update_sensor_display(int id, int mes1, int mes2)
   BSP_LCD_SetFont(&Font16);
 
   char temp_buf[6] = {0};
-  sprintf(temp_buf, "%d", mes1);
+  sprintf(temp_buf, "%d", temperatureInteger);
   temp_buf[2] = '.';
-  sprintf(temp_buf + 3, "%d", mes2);
+  sprintf(temp_buf + 3, "%d", temperatureDecimal);
   BSP_LCD_DisplayStringAt(40, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
 }
 
