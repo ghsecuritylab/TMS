@@ -55,8 +55,8 @@
 #include "usb_host.h"
 
 /* USER CODE BEGIN Includes */
-#include  <errno.h>
-#include  <sys/unistd.h>
+#include <errno.h>
+#include <sys/unistd.h>
 
 #include "stm32746g_discovery_lcd.h"
 #include "Utilities/Fonts/fonts.h"
@@ -81,9 +81,6 @@
 #include "lwip.h"
 
 #include "wm8994/wm8994.h"
-
-
-
 
 /* USER CODE END Includes */
 
@@ -127,7 +124,6 @@ UART_HandleTypeDef huart6;
 
 SDRAM_HandleTypeDef hsdram1;
 
-
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
@@ -159,12 +155,9 @@ static void MX_TIM12_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_TIM7_Init(void);
+static void http_server_netconn_thread(void const *arg);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-                                
-                                
-                                
-                                
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -172,70 +165,73 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-void mainTask(void* p);
+void mainTask(void *p);
 
 osThreadId netconn_thread_handle;
 
-#define LCD_X_SIZE			RK043FN48H_WIDTH
-#define LCD_Y_SIZE			RK043FN48H_HEIGHT
+#define LCD_X_SIZE RK043FN48H_WIDTH
+#define LCD_Y_SIZE RK043FN48H_HEIGHT
 
-#define PRINTF_USES_HAL_TX		0
+#define PRINTF_USES_HAL_TX 0
 
 int __io_putchar(int ch)
 {
-	uint8_t data = ch;
-	#if PRINTF_USES_HAL_TX
-		HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t*)&data, len, 100);	
-	#else
-		while(__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TXE) == RESET) { ; }
-		huart1.Instance->TDR = (uint16_t)data;
-	#endif
-	return 0;
+  uint8_t data = ch;
+#if PRINTF_USES_HAL_TX
+  HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t *)&data, len, 100);
+#else
+  while (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TXE) == RESET)
+  {
+    ;
+  }
+  huart1.Instance->TDR = (uint16_t)data;
+#endif
+  return 0;
 }
 
 char inkey(void)
 {
-	uint32_t flags = huart1.Instance->ISR;
-	
-	if((flags & UART_FLAG_RXNE) || (flags & UART_FLAG_ORE))
-	{
-		__HAL_UART_CLEAR_OREFLAG(&huart1);
-		return (huart1.Instance->RDR);
-	}
-	else
-		return 0;
+  uint32_t flags = huart1.Instance->ISR;
+
+  if ((flags & UART_FLAG_RXNE) || (flags & UART_FLAG_ORE))
+  {
+    __HAL_UART_CLEAR_OREFLAG(&huart1);
+    return (huart1.Instance->RDR);
+  }
+  else
+    return 0;
 }
 
 //partially based on available code examples
 static void lcd_start(void)
 {
-  /* LCD Initialization */ 
+  /* LCD Initialization */
   BSP_LCD_Init();
 
-  /* LCD Initialization */ 
+  /* LCD Initialization */
   BSP_LCD_LayerDefaultInit(0, (unsigned int)0xC0000000);
   //BSP_LCD_LayerDefaultInit(1, (unsigned int)lcd_image_bg+(LCD_X_SIZE*LCD_Y_SIZE*4));
-  BSP_LCD_LayerDefaultInit(1, (unsigned int)0xC0000000+(LCD_X_SIZE*LCD_Y_SIZE*4));
+  BSP_LCD_LayerDefaultInit(1, (unsigned int)0xC0000000 + (LCD_X_SIZE * LCD_Y_SIZE * 4));
 
-  /* Enable the LCD */ 
-  BSP_LCD_DisplayOn(); 
-  
+  /* Enable the LCD */
+  BSP_LCD_DisplayOn();
+
   /* Select the LCD Background Layer  */
   BSP_LCD_SelectLayer(0);
 
-  /* Clear the Background Layer */ 
+  /* Clear the Background Layer */
   BSP_LCD_Clear(LCD_COLOR_WHITE);
   BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-  
-  BSP_LCD_SetColorKeying(1,LCD_COLOR_WHITE);
-  
+
+  BSP_LCD_SetColorKeying(1, LCD_COLOR_WHITE);
+
   /* Select the LCD Foreground Layer  */
   BSP_LCD_SelectLayer(1);
 
-  /* Clear the Foreground Layer */ 
+  /* Clear the Foreground Layer */
   BSP_LCD_Clear(LCD_COLOR_WHITE);
   BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
-  
+
   /* Configure the transparency for foreground and background :
      Increase the transparency */
   BSP_LCD_SetTransparency(0, 255);
@@ -247,7 +243,7 @@ void draw_background(void)
 {
   /* Select the LCD Background Layer  */
   BSP_LCD_SelectLayer(0);
-  BSP_LCD_SetTextColor(LCD_COLOR_DARKGREY);
+  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
 
   /* Draw simple grid */
   BSP_LCD_DrawVLine(90, 0, LCD_Y_SIZE);
@@ -258,20 +254,21 @@ void draw_background(void)
   /* Placeholder for temperature plot */
   BSP_LCD_SetTextColor(LCD_COLOR_GREEN);
   BSP_LCD_SetFont(&Font16);
-  BSP_LCD_DisplayStringAt(90, LCD_Y_SIZE / 2, (uint8_t*) "Place for temperature plot", CENTER_MODE);
+  BSP_LCD_DisplayStringAt(90, LCD_Y_SIZE / 2, (uint8_t *)"Place for temperature plot", CENTER_MODE);
 
   /* Select the LCD Foreground Layer */
   BSP_LCD_SelectLayer(1);
 }
 
-void update_sensor_display(int id, double measurement) {
+void update_sensor_display(int id, int temperatureInteger, int temperatureDecimal)
+{
   /* Display id of sensor */
   BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
   BSP_LCD_SetFont(&Font12);
 
   char id_buf[] = {0};
   sprintf(id_buf, "%d", id);
-  BSP_LCD_DisplayStringAt(40, 10 + (id - 1) * 68, (uint8_t*) id_buf, LEFT_MODE);
+  BSP_LCD_DisplayStringAt(40, 10 + (id - 1) * 68, (uint8_t *)id_buf, LEFT_MODE);
 
   /* Clear line of previous measurment */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
@@ -281,29 +278,30 @@ void update_sensor_display(int id, double measurement) {
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
   BSP_LCD_SetFont(&Font16);
 
-  char temp_buf[] = {0};
-  sprintf(temp_buf, "%d", measurement);
-  BSP_LCD_DisplayStringAt(40, 34 + (id - 1) * 68, (uint8_t*) temp_buf, LEFT_MODE);
+  char temp_buf[6] = {0};
+  sprintf(temp_buf, "%d", temperatureInteger);
+  temp_buf[2] = '.';
+  sprintf(temp_buf + 3, "%d", temperatureDecimal);
+  BSP_LCD_DisplayStringAt(40, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
 }
 
-void clear_sensor_display(int id) {
+void clear_sensor_display(int id)
+{
   /* Clear one quarter if sensor goes away */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
   BSP_LCD_FillRect(0, 1 + (id - 1) * 68, 89, 67);
 }
 
-static TS_StateTypeDef  TS_State;
-
+//static TS_StateTypeDef  TS_State;
 
 int initialize_touchscreen(void)
 {
-	uint8_t  status = 0;
-	status = BSP_TS_Init(BSP_LCD_GetXSize(), BSP_LCD_GetYSize());
-	if(status != TS_OK) return -1;
-	return 0;
+  uint8_t status = 0;
+  status = BSP_TS_Init(BSP_LCD_GetXSize(), BSP_LCD_GetYSize());
+  if (status != TS_OK)
+    return -1;
+  return 0;
 }
-
-
 
 /* USER CODE END 0 */
 
@@ -362,10 +360,9 @@ int main(void)
   /* USER CODE BEGIN 2 */
   debug_init(&huart1);
 
-
-lcd_start();
-draw_background();
-initialize_touchscreen();
+  lcd_start();
+  draw_background();
+  initialize_touchscreen();
 
   /* USER CODE END 2 */
 
@@ -382,39 +379,36 @@ initialize_touchscreen();
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the thread(s) */
-/* USER CODE BEGIN RTOS_THREADS */
-/* definition and creation of server task */
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* definition and creation of server task */
 
-/* init code for LWIP */
-MX_LWIP_Init();
+  /* init code for LWIP */
+  MX_LWIP_Init();
 
-osThreadDef(netconn_thread, http_server_netconn_thread, osPriorityNormal, 0, 4096);
-netconn_thread_handle = osThreadCreate(osThread(netconn_thread), NULL);
+  osThreadDef(netconn_thread, http_server_netconn_thread, osPriorityNormal, 0, 4096);
+  netconn_thread_handle = osThreadCreate(osThread(netconn_thread), NULL);
 
- 
-/* USER CODE END RTOS_THREADS */
+  /* USER CODE END RTOS_THREADS */
 
-/* USER CODE BEGIN RTOS_QUEUES */
-/* add queues, ... */
-/* USER CODE END RTOS_QUEUES */
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
 
-/* Start scheduler */
-osKernelStart();
+  /* Start scheduler */
+  osKernelStart();
 
-/* We should never get here as control is now taken by the scheduler */
+  /* We should never get here as control is now taken by the scheduler */
 
-/* Infinite loop */
-/* USER CODE BEGIN WHILE */
-while (1)
-{
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
 
-  /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-  /* USER CODE BEGIN 3 */
-
+    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
-
 }
 
 /**
@@ -428,15 +422,15 @@ void SystemClock_Config(void)
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct;
 
-    /**Configure the main internal regulator output voltage 
+  /**Configure the main internal regulator output voltage 
     */
   __HAL_RCC_PWR_CLK_ENABLE();
 
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-    /**Initializes the CPU, AHB and APB busses clocks 
+  /**Initializes the CPU, AHB and APB busses clocks 
     */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -450,17 +444,16 @@ void SystemClock_Config(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Activate the Over-Drive mode 
+  /**Activate the Over-Drive mode 
     */
   if (HAL_PWREx_EnableOverDrive() != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Initializes the CPU, AHB and APB busses clocks 
+  /**Initializes the CPU, AHB and APB busses clocks 
     */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
@@ -471,11 +464,7 @@ void SystemClock_Config(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_SPDIFRX|RCC_PERIPHCLK_LTDC
-                              |RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_USART1
-                              |RCC_PERIPHCLK_USART6|RCC_PERIPHCLK_SAI2
-                              |RCC_PERIPHCLK_I2C1|RCC_PERIPHCLK_I2C3
-                              |RCC_PERIPHCLK_SDMMC1|RCC_PERIPHCLK_CLK48;
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_SPDIFRX | RCC_PERIPHCLK_LTDC | RCC_PERIPHCLK_RTC | RCC_PERIPHCLK_USART1 | RCC_PERIPHCLK_USART6 | RCC_PERIPHCLK_SAI2 | RCC_PERIPHCLK_I2C1 | RCC_PERIPHCLK_I2C3 | RCC_PERIPHCLK_SDMMC1 | RCC_PERIPHCLK_CLK48;
   PeriphClkInitStruct.PLLI2S.PLLI2SN = 100;
   PeriphClkInitStruct.PLLI2S.PLLI2SP = RCC_PLLP_DIV2;
   PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
@@ -500,11 +489,11 @@ void SystemClock_Config(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure the Systick interrupt time 
+  /**Configure the Systick interrupt time 
     */
-  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq() / 1000);
 
-    /**Configure the Systick 
+  /**Configure the Systick 
     */
   HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
 
@@ -518,7 +507,7 @@ static void MX_ADC3_Init(void)
 
   ADC_ChannelConfTypeDef sConfig;
 
-    /**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion) 
+  /**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion) 
     */
   hadc3.Instance = ADC3;
   hadc3.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
@@ -537,7 +526,7 @@ static void MX_ADC3_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time. 
+  /**Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time. 
     */
   sConfig.Channel = ADC_CHANNEL_4;
   sConfig.Rank = ADC_REGULAR_RANK_1;
@@ -546,7 +535,6 @@ static void MX_ADC3_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* CRC init function */
@@ -563,7 +551,6 @@ static void MX_CRC_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* DCMI init function */
@@ -586,7 +573,6 @@ static void MX_DCMI_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* DMA2D init function */
@@ -610,7 +596,6 @@ static void MX_DMA2D_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* I2C1 init function */
@@ -631,20 +616,19 @@ static void MX_I2C1_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure Analogue filter 
+  /**Configure Analogue filter 
     */
   if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure Digital filter 
+  /**Configure Digital filter 
     */
   if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* I2C3 init function */
@@ -665,20 +649,19 @@ static void MX_I2C3_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure Analogue filter 
+  /**Configure Analogue filter 
     */
   if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure Digital filter 
+  /**Configure Digital filter 
     */
   if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* LTDC init function */
@@ -727,7 +710,6 @@ static void MX_LTDC_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* QUADSPI init function */
@@ -748,7 +730,6 @@ static void MX_QUADSPI_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* RTC init function */
@@ -767,7 +748,7 @@ static void MX_RTC_Init(void)
 
   /* USER CODE END RTC_Init 1 */
 
-    /**Initialize RTC Only 
+  /**Initialize RTC Only 
     */
   hrtc.Instance = RTC;
   hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
@@ -781,7 +762,7 @@ static void MX_RTC_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Initialize RTC and set the Time and Date 
+  /**Initialize RTC and set the Time and Date 
     */
   sTime.Hours = 0x0;
   sTime.Minutes = 0x0;
@@ -803,7 +784,7 @@ static void MX_RTC_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Enable the Alarm A 
+  /**Enable the Alarm A 
     */
   sAlarm.AlarmTime.Hours = 0x0;
   sAlarm.AlarmTime.Minutes = 0x0;
@@ -821,7 +802,7 @@ static void MX_RTC_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Enable the Alarm B 
+  /**Enable the Alarm B 
     */
   sAlarm.AlarmDateWeekDay = 0x1;
   sAlarm.Alarm = RTC_ALARM_B;
@@ -830,13 +811,12 @@ static void MX_RTC_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Enable the TimeStamp 
+  /**Enable the TimeStamp 
     */
   if (HAL_RTCEx_SetTimeStamp(&hrtc, RTC_TIMESTAMPEDGE_RISING, RTC_TIMESTAMPPIN_POS1) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* SAI2 init function */
@@ -898,7 +878,6 @@ static void MX_SAI2_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* SDMMC1 init function */
@@ -912,7 +891,6 @@ static void MX_SDMMC1_SD_Init(void)
   hsd1.Init.BusWide = SDMMC_BUS_WIDE_1B;
   hsd1.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
   hsd1.Init.ClockDiv = 0;
-
 }
 
 /* SPDIFRX init function */
@@ -934,7 +912,6 @@ static void MX_SPDIFRX_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* SPI2 init function */
@@ -960,7 +937,6 @@ static void MX_SPI2_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* TIM1 init function */
@@ -1032,7 +1008,6 @@ static void MX_TIM1_Init(void)
   }
 
   HAL_TIM_MspPostInit(&htim1);
-
 }
 
 /* TIM2 init function */
@@ -1082,7 +1057,6 @@ static void MX_TIM2_Init(void)
   }
 
   HAL_TIM_MspPostInit(&htim2);
-
 }
 
 /* TIM3 init function */
@@ -1132,7 +1106,6 @@ static void MX_TIM3_Init(void)
   }
 
   HAL_TIM_MspPostInit(&htim3);
-
 }
 
 /* TIM5 init function */
@@ -1182,7 +1155,6 @@ static void MX_TIM5_Init(void)
   }
 
   HAL_TIM_MspPostInit(&htim5);
-
 }
 
 /* TIM7 init function */
@@ -1207,7 +1179,6 @@ static void MX_TIM7_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* TIM8 init function */
@@ -1242,7 +1213,6 @@ static void MX_TIM8_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* TIM12 init function */
@@ -1272,7 +1242,6 @@ static void MX_TIM12_Init(void)
   }
 
   HAL_TIM_MspPostInit(&htim12);
-
 }
 
 /* USART1 init function */
@@ -1293,7 +1262,6 @@ static void MX_USART1_UART_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* USART6 init function */
@@ -1314,7 +1282,6 @@ static void MX_USART6_UART_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /* FMC initialization function */
@@ -1349,7 +1316,6 @@ static void MX_FMC_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
 }
 
 /** Configure pins as 
@@ -1393,7 +1359,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(OTG_FS_PowerSwitchOn_GPIO_Port, OTG_FS_PowerSwitchOn_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOI, ARDUINO_D7_Pin|ARDUINO_D8_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOI, ARDUINO_D7_Pin | ARDUINO_D8_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LCD_BL_CTRL_GPIO_Port, LCD_BL_CTRL_Pin, GPIO_PIN_SET);
@@ -1405,7 +1371,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(DCMI_PWR_EN_GPIO_Port, DCMI_PWR_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, ARDUINO_D4_Pin|ARDUINO_D2_Pin|EXT_RST_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOG, ARDUINO_D4_Pin | ARDUINO_D2_Pin | EXT_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : OTG_HS_OverCurrent_Pin */
   GPIO_InitStruct.Pin = OTG_HS_OverCurrent_Pin;
@@ -1415,8 +1381,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : ULPI_D7_Pin ULPI_D6_Pin ULPI_D5_Pin ULPI_D3_Pin 
                            ULPI_D2_Pin ULPI_D1_Pin ULPI_D4_Pin */
-  GPIO_InitStruct.Pin = ULPI_D7_Pin|ULPI_D6_Pin|ULPI_D5_Pin|ULPI_D3_Pin 
-                          |ULPI_D2_Pin|ULPI_D1_Pin|ULPI_D4_Pin;
+  GPIO_InitStruct.Pin = ULPI_D7_Pin | ULPI_D6_Pin | ULPI_D5_Pin | ULPI_D3_Pin | ULPI_D2_Pin | ULPI_D1_Pin | ULPI_D4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -1443,7 +1408,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(OTG_FS_PowerSwitchOn_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ARDUINO_D7_Pin ARDUINO_D8_Pin LCD_DISP_Pin */
-  GPIO_InitStruct.Pin = ARDUINO_D7_Pin|ARDUINO_D8_Pin|LCD_DISP_Pin;
+  GPIO_InitStruct.Pin = ARDUINO_D7_Pin | ARDUINO_D8_Pin | LCD_DISP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1469,7 +1434,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(OTG_FS_OverCurrent_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : TP3_Pin NC2_Pin */
-  GPIO_InitStruct.Pin = TP3_Pin|NC2_Pin;
+  GPIO_InitStruct.Pin = TP3_Pin | NC2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
@@ -1496,14 +1461,14 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(ULPI_NXT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ARDUINO_D4_Pin ARDUINO_D2_Pin EXT_RST_Pin */
-  GPIO_InitStruct.Pin = ARDUINO_D4_Pin|ARDUINO_D2_Pin|EXT_RST_Pin;
+  GPIO_InitStruct.Pin = ARDUINO_D4_Pin | ARDUINO_D2_Pin | EXT_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ULPI_STP_Pin ULPI_DIR_Pin */
-  GPIO_InitStruct.Pin = ULPI_STP_Pin|ULPI_DIR_Pin;
+  GPIO_InitStruct.Pin = ULPI_STP_Pin | ULPI_DIR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -1517,63 +1482,102 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(RMII_RXER_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ULPI_CLK_Pin ULPI_D0_Pin */
-  GPIO_InitStruct.Pin = ULPI_CLK_Pin|ULPI_D0_Pin;
+  GPIO_InitStruct.Pin = ULPI_CLK_Pin | ULPI_D0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF10_OTG_HS;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
 }
 
 /* USER CODE BEGIN 4 */
-#define BUFFER_SIZE 500
-#define MAX_SENSORS 4
-#define MAX_MEASUREMENTS 10
+
 
 static char response[BUFFER_SIZE];
 static char id[3];
-static char temperature[6];
-static int sensorMinId = 0;
+static char temperatureIntegerPart[3];
+static char temperatureDecimalPart[3];
+static int sensorMinId = 1;
 
 static double measurements[MAX_SENSORS][MAX_MEASUREMENTS];
-static int occupied[MAX_SENSORS] = {-1};
 
 void clear_response_buffer()
 {
-  for(int i=0; i<BUFFER_SIZE; i++){
+  for (int i = 0; i < BUFFER_SIZE; i++)
+  {
     response[i] = 0;
   }
 }
 
-void save_measurement(int id, double measurement) {
-  occupied[id] = occupied[id] + 1 >= MAX_MEASUREMENTS ? occupied[id] : occupied[id] + 1;
-  if (occupied[id] == MAX_MEASUREMENTS - 1){
-    for (int i = 0; i < MAX_SENSORS - 1; i++)
+void save_measurement(int id, double measurement)
+{
+  for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+  {
+    measurements[id + 1][i] = measurements[id][i];
+  }
+  measurements[id][0] = measurement;
+}
+
+graph *init_graph(graph *g){
+  g->table = malloc(sizeof(*int) * MAX_SENSORS);
+  for (int i = 0; i < MAX_SENSORS; i++){
+    g->table[i] = malloc(sizeof(int) * MAX_MEASUREMENTS);
+  }
+  g->decimalTemperature = malloc(sizeof(int) * MAX_MEASUREMENTS);
+  g->integerTemperature = malloc(sizeof(int) * MAX_MEASUREMENTS);
+  g->valid = 0;
+  return g;
+}
+
+void free_graph(graph *g){
+  free(g->table);
+  free(g->decimalTemperature);
+  free(g->integerTemperature);
+}
+
+graph *get_updated_graph(graph *g)
+{
+  double min = 404;
+  double max = -404;
+  for (int i = 0; i < MAX_SENSORS; i++)
+  {
+    for (int j = 0; j < MAX_MEASUREMENTS; j++)
     {
-      measurements[id][i] = measurements[id][i + 1];
+      if (measurements[i][j] > max) {
+        max = measurements[i][j];
+      }
+      if (measurements[i][j] < min && measurements[i][j] != -404){
+        min = measurements[i][j];
+      }
     }
   }
-  measurements[id][occupied[id]] = measurement;
+
+  if (min == 404 && max == -404) {
+    g->valid = 0;
+    return g;
+  }
+
+  return g;
 }
 
 //based on available code examples
-static void http_server_serve(struct netconn *conn) 
+static void http_server_serve(struct netconn *conn)
 {
+  xprintf(".");
   struct netbuf *inbuf;
   err_t recv_err;
-  char* buf;
+  char *buf;
   u16_t buflen;
-  
+
   /* Read the data from the port, blocking if nothing yet there. 
    We assume the request (the part we care about) is in one netbuf */
   recv_err = netconn_recv(conn, &inbuf);
-  
+
   if (recv_err == ERR_OK)
   {
-    if (netconn_err(conn) == ERR_OK) 
+    if (netconn_err(conn) == ERR_OK)
     {
-      netbuf_data(inbuf, (void**)&buf, &buflen);
+      netbuf_data(inbuf, (void **)&buf, &buflen);
       void clear_response_buffer();
       /* Is this an HTTP GET command? is it request for machine id?*/
       if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
@@ -1593,19 +1597,24 @@ static void http_server_serve(struct netconn *conn)
         {
           id[i] = buf[8 + i];
         }
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 2; i++)
         {
-          temperature[i] = buf[16 + i];
+          temperatureIntegerPart[i] = buf[16 + i];
+          temperatureDecimalPart[i] = buf[19 + i];
         }
         id[2] = 0;
-        temperature[6] = 0;
+        temperatureIntegerPart[2] = 0;
+        temperatureDecimalPart[2] = 0;
 
         int machineId;
         sscanf(id, "%d", &machineId);
-        double measurement;
-        sscanf(temperature, "%lf", &measurement);
+        int temperatureInteger;
+        sscanf(temperatureIntegerPart, "%d", &temperatureInteger);
+        int temperatureDecimal;
+        sscanf(temperatureDecimalPart, "%d", &temperatureDecimalPart);
 
-        save_measurement(machineId, measurement);
+        save_measurement(machineId, temperatureInteger + (temperatureDecimal / 100));
+        update_sensor_display(machineId, temperatureInteger, temperatureDecimalPart);
 
         response[0] = 0;
         sprintf(response, "Ok.");
@@ -1615,39 +1624,44 @@ static void http_server_serve(struct netconn *conn)
   }
   /* Close the connection (server closes in HTTP) */
   netconn_close(conn);
-  
+
   /* Delete the buffer (netconn_recv gives us ownership,
    so we have to make sure to deallocate the buffer) */
   netbuf_delete(inbuf);
 }
 
-
 //based on available code examples
 static void http_server_netconn_thread(void const *arg)
-{ 
+{
   struct netconn *conn, *newconn;
   err_t err, accept_err;
-  
-  xprintf("http_server_netconn_thread\n");
-  
+  measurements[MAX_SENSORS][MAX_MEASUREMENTS];
+
+  for (int i = 0; i < MAX_SENSORS; i++) {
+    for (int j = 0; j < MAX_MEASUREMENTS; j++) {
+      measurements[i][j] = -404;
+    }
+  }
+
+    xprintf("http_server_netconn_thread\n");
+
   /* Create a new TCP connection handle */
   conn = netconn_new(NETCONN_TCP);
-  
-  if (conn!= NULL)
+
+  if (conn != NULL)
   {
     /* Bind to port 80 (HTTP) with default IP address */
     err = netconn_bind(conn, NULL, 80);
-    
+
     if (err == ERR_OK)
     {
       /* Put the connection into LISTEN state */
       netconn_listen(conn);
-  
-      while(1) 
+      while (1)
       {
         /* accept any icoming connection */
         accept_err = netconn_accept(conn, &newconn);
-        if(accept_err == ERR_OK)
+        if (accept_err == ERR_OK)
         {
           /* serve connection */
           http_server_serve(newconn);
@@ -1660,29 +1674,26 @@ static void http_server_netconn_thread(void const *arg)
   }
 }
 
-#define AUDIO_OUT_BUFFER_SIZE                      8192
-enum {
-  BUFFER_OFFSET_NONE = 0,  
-  BUFFER_OFFSET_HALF,  
-  BUFFER_OFFSET_FULL,     
+#define AUDIO_OUT_BUFFER_SIZE 8192
+enum
+{
+  BUFFER_OFFSET_NONE = 0,
+  BUFFER_OFFSET_HALF,
+  BUFFER_OFFSET_FULL,
 };
 
 uint8_t buff[AUDIO_OUT_BUFFER_SIZE];
-static FIL file;
 extern ApplicationTypeDef Appli_state;
-static uint8_t player_state = 0;
 static uint8_t buf_offs = BUFFER_OFFSET_NONE;
-static uint32_t fpos = 0;
-
 
 void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 {
-    buf_offs = BUFFER_OFFSET_FULL;
+  buf_offs = BUFFER_OFFSET_FULL;
 }
 
 void BSP_AUDIO_OUT_HalfTransfer_CallBack(void)
-{ 
-    buf_offs = BUFFER_OFFSET_HALF;
+{
+  buf_offs = BUFFER_OFFSET_HALF;
 }
 
 /* USER CODE END 4 */
@@ -1700,7 +1711,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM6) {
+  if (htim->Instance == TIM6)
+  {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
@@ -1718,13 +1730,13 @@ void _Error_Handler(char *file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  while(1)
+  while (1)
   {
   }
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -1732,8 +1744,8 @@ void _Error_Handler(char *file, int line)
   * @param  line: assert_param error line source number
   * @retval None
   */
-void assert_failed(uint8_t* file, uint32_t line)
-{ 
+void assert_failed(uint8_t *file, uint32_t line)
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
