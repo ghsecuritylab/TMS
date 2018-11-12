@@ -278,11 +278,50 @@ void draw_background(void)
   BSP_LCD_SelectLayer(1);
 }
 
+uint16_t choose_color(int id) 
+{
+  uint16_t color;
+  switch (id)
+  {
+    case 0:
+      color = LCD_COLOR_CYAN;
+      break;
+    case 1:
+      color = LCD_COLOR_MAGENTA;
+      break;
+    case 2:
+      color = LCD_COLOR_ORANGE;
+      break;
+    case 3:
+      color = LCD_COLOR_RED;
+      break;
+    default:
+      break;
+  }
+  return color;
+}
+
 void update_plot()
 {
-  for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+  /* Plot coordinates and constants */
+  uint16_t X0 = 120;
+  uint16_t Y0 = 220;
+  uint16_t AX_length = 300;
+  uint16_t AY_length = 200;
+  uint16_t Y_min = 210;
+  uint16_t Y_size = 170;
+
+  for (int id = 0, id < MAX_SENSORS - 1; id++)
   {
-    // TODO
+    uint16_t color = choose_color(id);
+    BSP_LCD_SetTextColor(color);
+    for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+    {
+      double value = measurements[id][i];
+      uint16_t y = Y0 - 10 - (value / Y_size);
+      uint16_t x = X0 + (i + 1) * (AX_length / MAX_MEASUREMENTS);
+      BSP_LCD_DrawCircle(x, y, 2);
+    }
   }
 }
 
