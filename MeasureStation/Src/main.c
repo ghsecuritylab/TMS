@@ -272,7 +272,7 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
 
   /* Clear line of previous measurment */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-  BSP_LCD_FillRect(40, 34 + (id - 1) * 68, 16, 40); // check those values
+  BSP_LCD_FillRect(25, 34 + (id - 1) * 68, 64, 25);
 
   /* Display value of latest measurement */
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
@@ -282,7 +282,7 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
   sprintf(temp_buf, "%d", temperatureInteger);
   temp_buf[2] = '.';
   sprintf(temp_buf + 3, "%d", temperatureDecimal);
-  BSP_LCD_DisplayStringAt(40, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
+  BSP_LCD_DisplayStringAt(25, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
 }
 
 void clear_sensor_display(int id)
