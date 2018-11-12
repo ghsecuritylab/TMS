@@ -172,6 +172,11 @@ osThreadId netconn_thread_handle;
 #define LCD_X_SIZE RK043FN48H_WIDTH
 #define LCD_Y_SIZE RK043FN48H_HEIGHT
 
+#define BUFFER_SIZE 500
+#define MAX_SENSORS 4
+#define MAX_MEASUREMENTS 10
+#define NR_LEVELS 10
+
 #define PRINTF_USES_HAL_TX 0
 
 int __io_putchar(int ch)
@@ -251,13 +256,34 @@ void draw_background(void)
   BSP_LCD_DrawHLine(0, 136, 90);
   BSP_LCD_DrawHLine(0, 204, 90);
 
-  /* Placeholder for temperature plot */
-  BSP_LCD_SetTextColor(LCD_COLOR_GREEN);
-  BSP_LCD_SetFont(&Font16);
-  BSP_LCD_DisplayStringAt(90, LCD_Y_SIZE / 2, (uint8_t *)"Place for temperature plot", CENTER_MODE);
+  /* Temperature plot */
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+  BSP_LCD_SetFont(&Font12);
+
+  /* Axis Y with dart */
+  uint16_t AY_x = 120;
+  uint16_t AY_y = 20;
+  uint16_t AY_length = 200;
+  BSP_LCD_DrawVLine(AY_x, AY_y, AY_length);
+  BSP_LCD_FillTriangle(AY_x, AY_y, AY_x + 10, AY_x + 3, AY_x + 10, AY_x - 3);
+
+  /* Axis X with dart */
+  uint16_t AX_x = 420;
+  uint16_t AX_y = 220;
+  uint16_t AX_length = 300;
+  BSP_LCD_DrawVLine(AX_x - AX_length, AX_y, AX_length);
+  BSP_LCD_FillTriangle(AX_x, AX_y, AX_x - 10, AX_x + 3, AX_x - 10, AX_x - 3);
 
   /* Select the LCD Foreground Layer */
   BSP_LCD_SelectLayer(1);
+}
+
+void update_plot()
+{
+  for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+  {
+    // TODO
+  }
 }
 
 void update_sensor_display(int id, int temperatureInteger, int temperatureDecimal)
@@ -1518,48 +1544,6 @@ void save_measurement(int id, double measurement)
   measurements[id][0] = measurement;
 }
 
-graph *init_graph(graph *g){
-  g->table = malloc(sizeof(*int) * MAX_SENSORS);
-  for (int i = 0; i < MAX_SENSORS; i++){
-    g->table[i] = malloc(sizeof(int) * MAX_MEASUREMENTS);
-  }
-  g->decimalTemperature = malloc(sizeof(int) * MAX_MEASUREMENTS);
-  g->integerTemperature = malloc(sizeof(int) * MAX_MEASUREMENTS);
-  g->valid = 0;
-  return g;
-}
-
-void free_graph(graph *g){
-  free(g->table);
-  free(g->decimalTemperature);
-  free(g->integerTemperature);
-}
-
-graph *get_updated_graph(graph *g)
-{
-  double min = 404;
-  double max = -404;
-  for (int i = 0; i < MAX_SENSORS; i++)
-  {
-    for (int j = 0; j < MAX_MEASUREMENTS; j++)
-    {
-      if (measurements[i][j] > max) {
-        max = measurements[i][j];
-      }
-      if (measurements[i][j] < min && measurements[i][j] != -404){
-        min = measurements[i][j];
-      }
-    }
-  }
-
-  if (min == 404 && max == -404) {
-    g->valid = 0;
-    return g;
-  }
-
-  return g;
-}
-
 //based on available code examples
 static void http_server_serve(struct netconn *conn)
 {
@@ -1615,6 +1599,7 @@ static void http_server_serve(struct netconn *conn)
 
         save_measurement(machineId, temperatureInteger + (temperatureDecimal / 100));
         update_sensor_display(machineId, temperatureInteger, temperatureDecimalPart);
+        update_plot();
 
         response[0] = 0;
         sprintf(response, "Ok.");
