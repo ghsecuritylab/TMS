@@ -161,7 +161,7 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-
+static void http_server_netconn_thread(void const *arg);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
@@ -172,7 +172,14 @@ osThreadId netconn_thread_handle;
 #define LCD_X_SIZE RK043FN48H_WIDTH
 #define LCD_Y_SIZE RK043FN48H_HEIGHT
 
+#define BUFFER_SIZE 500
+#define MAX_SENSORS 4
+#define MAX_MEASUREMENTS 10
+#define NR_LEVELS 10
+
 #define PRINTF_USES_HAL_TX 0
+
+static double measurements[MAX_SENSORS][MAX_MEASUREMENTS];
 
 int __io_putchar(int ch)
 {
@@ -251,13 +258,95 @@ void draw_background(void)
   BSP_LCD_DrawHLine(0, 136, 90);
   BSP_LCD_DrawHLine(0, 204, 90);
 
-  /* Placeholder for temperature plot */
-  BSP_LCD_SetTextColor(LCD_COLOR_GREEN);
-  BSP_LCD_SetFont(&Font16);
-  BSP_LCD_DisplayStringAt(90, LCD_Y_SIZE / 2, (uint8_t *)"Place for temperature plot", CENTER_MODE);
+  /* Temperature plot */
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+  BSP_LCD_SetFont(&Font12);
 
+  /* Axis Y */
+  uint16_t AY_x = 120;
+  uint16_t AY_y = 20;
+  uint16_t AY_length = 200;
+  BSP_LCD_DrawVLine(AY_x, AY_y, AY_length);
+  //FillTriangle(AY_x, AY_y, AY_x + 10, AY_x + 3, AY_x + 10, AY_x - 3);
+  
+  /* Axis Y dart */
+  Point y1, y2, y3;
+  y1.X = AY_x;
+  y1.Y = AY_y;
+  y2.X = AY_x + 4;
+  y2.Y = AY_y + 10;
+  y3.X = AY_x - 4;
+  y3.Y = AY_y + 10;
+  Point pointsY[3] = {y1, y2, y3}; 
+  BSP_LCD_FillPolygon(pointsY, 3);
+
+  /* Axis X with dart */
+  uint16_t AX_x = 420;
+  uint16_t AX_y = 220;
+  uint16_t AX_length = 300;
+  BSP_LCD_DrawHLine(AX_x - AX_length, AX_y, AX_length);
+  //FillTriangle(AX_x, AX_y, AX_x - 10, AX_x + 3, AX_x - 10, AX_x - 3);
+  
+  /* Axis X dart */
+  Point x1, x2, x3;
+  x1.X = AX_x;
+  x1.Y = AX_y;
+  x2.X = AX_x - 10;
+  x2.Y = AX_y + 4;
+  x3.X = AX_x - 10;
+  x3.Y = AX_y - 4;
+  Point pointsX[3] = {x1, x2, x3}; 
+  BSP_LCD_FillPolygon(pointsX, 3);
+  
   /* Select the LCD Foreground Layer */
   BSP_LCD_SelectLayer(1);
+}
+
+uint32_t choose_color(int id) 
+{
+  uint32_t color = LCD_COLOR_BLACK;
+  switch (id)
+  {
+    case 0:
+      color = LCD_COLOR_CYAN;
+      break;
+    case 1:
+      color = LCD_COLOR_MAGENTA;
+      break;
+    case 2:
+      color = LCD_COLOR_ORANGE;
+      break;
+    case 3:
+      color = LCD_COLOR_RED;
+      break;
+    default:
+      break;
+  }
+  return color;
+}
+
+void update_plot()
+{
+  /* Plot coordinates and constants */
+  uint16_t X0 = 120;
+  uint16_t Y0 = 220;
+  uint16_t AX_length = 300;
+  //uint16_t AY_length = 200;
+  //uint16_t Y_min = 210;
+  uint16_t Y_size = 170;
+
+  for (int id = 0; id < MAX_SENSORS - 1; id++)
+  {
+    uint32_t color = choose_color(id);
+    BSP_LCD_SetTextColor(color);
+    for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+    {
+      double value = measurements[id][i];
+      uint16_t y = Y0 - 10 - (value / Y_size);
+      uint16_t x = X0 + (i + 1) * (AX_length / MAX_MEASUREMENTS);
+      BSP_LCD_DrawCircle(x, y, 2);
+    }
+  }
 }
 
 void update_sensor_display(int id, int temperatureInteger, int temperatureDecimal)
@@ -272,7 +361,7 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
 
   /* Clear line of previous measurment */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-  BSP_LCD_FillRect(40, 34 + (id - 1) * 68, 16, 40); // check those values
+  BSP_LCD_FillRect(20, 34 + (id - 1) * 68, 64, 25);
 
   /* Display value of latest measurement */
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
@@ -282,7 +371,7 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
   sprintf(temp_buf, "%d", temperatureInteger);
   temp_buf[2] = '.';
   sprintf(temp_buf + 3, "%d", temperatureDecimal);
-  BSP_LCD_DisplayStringAt(40, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
+  BSP_LCD_DisplayStringAt(20, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
 }
 
 void clear_sensor_display(int id)
@@ -1499,8 +1588,6 @@ static char temperatureIntegerPart[3];
 static char temperatureDecimalPart[3];
 static int sensorMinId = 1;
 
-static double measurements[MAX_SENSORS][MAX_MEASUREMENTS];
-
 void clear_response_buffer()
 {
   for (int i = 0; i < BUFFER_SIZE; i++)
@@ -1516,48 +1603,6 @@ void save_measurement(int id, double measurement)
     measurements[id + 1][i] = measurements[id][i];
   }
   measurements[id][0] = measurement;
-}
-
-graph *init_graph(graph *g){
-  g->table = malloc(sizeof(*int) * MAX_SENSORS);
-  for (int i = 0; i < MAX_SENSORS; i++){
-    g->table[i] = malloc(sizeof(int) * MAX_MEASUREMENTS);
-  }
-  g->decimalTemperature = malloc(sizeof(int) * MAX_MEASUREMENTS);
-  g->integerTemperature = malloc(sizeof(int) * MAX_MEASUREMENTS);
-  g->valid = 0;
-  return g;
-}
-
-void free_graph(graph *g){
-  free(g->table);
-  free(g->decimalTemperature);
-  free(g->integerTemperature);
-}
-
-graph *get_updated_graph(graph *g)
-{
-  double min = 404;
-  double max = -404;
-  for (int i = 0; i < MAX_SENSORS; i++)
-  {
-    for (int j = 0; j < MAX_MEASUREMENTS; j++)
-    {
-      if (measurements[i][j] > max) {
-        max = measurements[i][j];
-      }
-      if (measurements[i][j] < min && measurements[i][j] != -404){
-        min = measurements[i][j];
-      }
-    }
-  }
-
-  if (min == 404 && max == -404) {
-    g->valid = 0;
-    return g;
-  }
-
-  return g;
 }
 
 //based on available code examples
@@ -1611,13 +1656,13 @@ static void http_server_serve(struct netconn *conn)
         int temperatureInteger;
         sscanf(temperatureIntegerPart, "%d", &temperatureInteger);
         int temperatureDecimal;
-        sscanf(temperatureDecimalPart, "%d", &temperatureDecimalPart);
+        sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
 
         save_measurement(machineId, temperatureInteger + (temperatureDecimal / 100));
-        update_sensor_display(machineId, temperatureInteger, temperatureDecimalPart);
-
-        response[0] = 0;
-        sprintf(response, "Ok.");
+        update_sensor_display(machineId, temperatureInteger, temperatureDecimal);
+		
+        update_plot();
+        sprintf(response, "Okxd.");
         netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
       }
     }
@@ -1635,7 +1680,6 @@ static void http_server_netconn_thread(void const *arg)
 {
   struct netconn *conn, *newconn;
   err_t err, accept_err;
-  measurements[MAX_SENSORS][MAX_MEASUREMENTS];
 
   for (int i = 0; i < MAX_SENSORS; i++) {
     for (int j = 0; j < MAX_MEASUREMENTS; j++) {
