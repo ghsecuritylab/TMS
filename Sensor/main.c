@@ -27,10 +27,10 @@ const char *ssid = "esp";
 const char *password = "haslo8266";
 
 /* IP of MeasureStation (STM32F7) */
-const char *host = "192.168.0.106";
+const char *host = "http://192.168.0.114";
 
 /* ID of sensor (ESP8266) */
-const char *id = "1"
+const char *id = "01";
 
 //=======================================================================
 //                    Set temperature sensor
@@ -59,7 +59,7 @@ void SetupDS18B20(){
   Serial.print( "Device count: " );
   Serial.println( numberOfDevices );
 
-  lastTemp = millis();
+  //lastTemp = millis();
   DS18B20.requestTemperatures();
 
   // Loop through each device, print out address
@@ -138,9 +138,9 @@ void loop() {
   DS18B20.requestTemperatures(); //Initiate the temperature measurement
 
   /* Compose string to send via GET method */
-  measure = String(tempc);
-  Link = host + "/id=" + id + "/temp=" + measure ;
-  
+  measure = String(tempC);
+  Link = host + String("/id=") + id + "/temp=" + measure ;
+  Serial.println(Link);
   http.begin(Link);             //Specify request destination
   int httpCode = http.GET();    //Send the request
 
