@@ -31,6 +31,8 @@ const char *host = "http://192.168.0.114";
 
 /* ID of sensor (ESP8266) */
 const char *id = "01";
+String id_test;
+int id_set = 0;
 
 //=======================================================================
 //                    Set temperature sensor
@@ -128,6 +130,20 @@ void loop() {
   HTTPClient http;              //Declare object of class HTTPClient
   String measure, Link;
   float tempC;
+
+  if(id_set == 0){
+    Link = host + "/getid";
+    http.begin(Link);          
+    int httpCode = http.GET();
+
+    String payload = http.getString(); 
+    Serial.println(httpCode);          
+    Serial.println(payload);           
+    http.end(); 
+    id_test = payload;
+    id_set = 1;
+    delay(5000);
+  }
 
   /* Get measure from DS18B20 sensor */
   for (int i = 0; i < numberOfDevices; i++)

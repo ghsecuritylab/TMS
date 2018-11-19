@@ -1581,7 +1581,6 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-
 static char response[BUFFER_SIZE];
 static char id[3];
 static char temperatureIntegerPart[3];
@@ -1627,8 +1626,8 @@ static void http_server_serve(struct netconn *conn)
       /* Is this an HTTP GET command? is it request for machine id?*/
       if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
       {
-        response[0] = 0;
         sprintf(response, "%d", sensorMinId);
+        sensorMinId+=1;
         netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
       }
 
@@ -1662,7 +1661,7 @@ static void http_server_serve(struct netconn *conn)
         update_sensor_display(machineId, temperatureInteger, temperatureDecimal);
 		
         update_plot();
-        sprintf(response, "Okxd.");
+        sprintf(response, "Ok.\n");
         netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
       }
     }
