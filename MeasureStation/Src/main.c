@@ -245,20 +245,33 @@ static void lcd_start(void)
   BSP_LCD_SetTransparency(1, 255);
 }
 
-//[rmv]
+uint32_t choose_color(int id) 
+{
+  uint32_t color = LCD_COLOR_BLACK;
+  switch (id)
+  {
+    case 0: color = LCD_COLOR_CYAN; break;
+    case 1: color = LCD_COLOR_MAGENTA; break;
+    case 2: color = LCD_COLOR_ORANGE; break;
+    case 3: color = LCD_COLOR_RED; break;
+    default: break;
+  }
+  return color;
+}
+
 void draw_background(void)
 {
   /* Select the LCD Background Layer  */
   BSP_LCD_SelectLayer(0);
   BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
 
-  /* Draw simple grid */
+  /* Draw simple grid for sensors display */
   BSP_LCD_DrawVLine(90, 0, LCD_Y_SIZE);
   BSP_LCD_DrawHLine(0, 68, 90);
   BSP_LCD_DrawHLine(0, 136, 90);
   BSP_LCD_DrawHLine(0, 204, 90);
 
-  /* Temperature plot */
+  /* Temperature axes with darts */
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
   BSP_LCD_SetFont(&Font12);
 
@@ -267,7 +280,6 @@ void draw_background(void)
   uint16_t AY_y = 20;
   uint16_t AY_length = 200;
   BSP_LCD_DrawVLine(AY_x, AY_y, AY_length);
-  //FillTriangle(AY_x, AY_y, AY_x + 10, AY_x + 3, AY_x + 10, AY_x - 3);
   
   /* Axis Y dart */
   Point y1, y2, y3;
@@ -280,12 +292,24 @@ void draw_background(void)
   Point pointsY[3] = {y1, y2, y3}; 
   BSP_LCD_FillPolygon(pointsY, 3);
 
-  /* Axis X with dart */
+  /* Axis Y scale */
+  for (int y = 30, int t = 50; y < 220, t > -50; y += 20, t -= 10)
+  {
+    BSP_LCD_DrawHLine(116, y, 4);
+    char buf[] = "";
+    sprintf(buf, "%d", t);
+    BSP_LCD_DisplayStringAt(106, y, (uint8_t*) buf, LEFT_MODE);
+  }
+  for (int y = 40; y < 220; y += 20)
+  {
+    BSP_LCD_DrawHLine(118, y, 2);
+  }
+
+  /* Axis X */
   uint16_t AX_x = 420;
-  uint16_t AX_y = 220;
+  uint16_t AX_y = 130;
   uint16_t AX_length = 300;
   BSP_LCD_DrawHLine(AX_x - AX_length, AX_y, AX_length);
-  //FillTriangle(AX_x, AX_y, AX_x - 10, AX_x + 3, AX_x - 10, AX_x - 3);
   
   /* Axis X dart */
   Point x1, x2, x3;
@@ -297,54 +321,62 @@ void draw_background(void)
   x3.Y = AX_y - 4;
   Point pointsX[3] = {x1, x2, x3}; 
   BSP_LCD_FillPolygon(pointsX, 3);
+
+  /* Plot caption */
+  for (int id = 0; id < MAX_SENSORS; id++) 
+  {
+    uint32_t color = choose_color(id);
+    BSP_LCD_SetTextColor(color);
+    BSP_LCD_FillCircle(130 + id * 70, 245, 3);
+
+    char buf[] = "";
+    sprintf(buf, "- sensor %d", id + 1);
+    BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+    BSP_LCD_SetFont(&Font12);
+    BSP_LCD_DisplayStringAt(135 + id * 70, 245, (uint8_t*) buf, LEFT_MODE);
+  }
   
   /* Select the LCD Foreground Layer */
   BSP_LCD_SelectLayer(1);
 }
 
-uint32_t choose_color(int id) 
-{
-  uint32_t color = LCD_COLOR_BLACK;
-  switch (id)
-  {
-    case 0:
-      color = LCD_COLOR_CYAN;
-      break;
-    case 1:
-      color = LCD_COLOR_MAGENTA;
-      break;
-    case 2:
-      color = LCD_COLOR_ORANGE;
-      break;
-    case 3:
-      color = LCD_COLOR_RED;
-      break;
-    default:
-      break;
-  }
-  return color;
-}
-
 void update_plot()
 {
   /* Plot coordinates and constants */
-  uint16_t X0 = 120;
-  uint16_t Y0 = 220;
-  uint16_t AX_length = 300;
-  //uint16_t AY_length = 200;
-  //uint16_t Y_min = 210;
-  uint16_t Y_size = 170;
+  uint16_t X_0 = 120;
+  uint16_t X_length = 290;
+  uint16_t Y_0 = 130;
+  /*
+  uint16_t Y_min = 210;
+  uint16_t Y_max = 30;
+  int16_t Y_value_min = -40;
+  int16_t Y_value_max = 50;
+  (Y_0 - Y_max) / Y_value_max = 2
+  (Y_0 - Y_min) / Y_value_min = 2
+  */
 
+
+  /* Clear area of plot (without axes) */
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(120, 30, 290, 100);
+  BSP_LCD_FillRect(120, 130, 290, 90);
+
+  /* Display measurment matrix */
   for (int id = 0; id < MAX_SENSORS - 1; id++)
   {
+    /* Choose color for one sensor */
     uint32_t color = choose_color(id);
     BSP_LCD_SetTextColor(color);
+
+    /* Display last values from one sensor */
     for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
     {
       double value = measurements[id][i];
-      uint16_t y = Y0 - 10 - (value / Y_size);
-      uint16_t x = X0 + (i + 1) * (AX_length / MAX_MEASUREMENTS);
-      BSP_LCD_DrawCircle(x, y, 2);
+      if (value == -404) continue;
+
+      uint16_t y = Y_0 - value * 2;
+      uint16_t x = X_0 + (i + 1) * (X_length / MAX_MEASUREMENTS);
+      BSP_LCD_FillCircle(x, y, 2);
     }
   }
 }
@@ -357,7 +389,7 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
 
   char id_buf[] = {0};
   sprintf(id_buf, "%d", id);
-  BSP_LCD_DisplayStringAt(40, 10 + (id - 1) * 68, (uint8_t *)id_buf, LEFT_MODE);
+  BSP_LCD_DisplayStringAt(40, 10 + (id - 1) * 68, (uint8_t*) id_buf, LEFT_MODE);
 
   /* Clear line of previous measurment */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
@@ -371,7 +403,7 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
   sprintf(temp_buf, "%d", temperatureInteger);
   temp_buf[2] = '.';
   sprintf(temp_buf + 3, "%d", temperatureDecimal);
-  BSP_LCD_DisplayStringAt(20, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
+  BSP_LCD_DisplayStringAt(20, 34 + (id - 1) * 68, (uint8_t*) temp_buf, LEFT_MODE);
 }
 
 void clear_sensor_display(int id)
@@ -1600,7 +1632,7 @@ void save_measurement(int id, double measurement)
 {
   for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
   {
-    measurements[id + 1][i] = measurements[id][i];
+    measurements[id][i + 1] = measurements[id][i];
   }
   measurements[id][0] = measurement;
 }
@@ -1658,7 +1690,7 @@ static void http_server_serve(struct netconn *conn)
         int temperatureDecimal;
         sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
 
-        save_measurement(machineId, temperatureInteger + (temperatureDecimal / 100));
+        save_measurement(machineId - 1, temperatureInteger + (temperatureDecimal / 100));
         update_sensor_display(machineId, temperatureInteger, temperatureDecimal);
 		
         update_plot();
