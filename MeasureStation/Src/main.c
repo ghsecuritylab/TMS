@@ -155,7 +155,6 @@ static void MX_TIM12_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_TIM7_Init(void);
-static void http_server_netconn_thread(void const *arg);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
@@ -293,7 +292,7 @@ void draw_background(void)
   BSP_LCD_FillPolygon(pointsY, 3);
 
   /* Axis Y scale */
-  for (int y = 30, int t = 50; y < 220, t > -50; y += 20, t -= 10)
+  for (int y = 30, t = 50; y < 220 && t > -40; y += 20, t -= 10)
   {
     BSP_LCD_DrawHLine(116, y, 4);
     char buf[] = "";
@@ -331,7 +330,7 @@ void draw_background(void)
 
     char buf[] = "";
     sprintf(buf, "- sensor %d", id + 1);
-    BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+    BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
     BSP_LCD_SetFont(&Font12);
     BSP_LCD_DisplayStringAt(135 + id * 70, 245, (uint8_t*) buf, LEFT_MODE);
   }
