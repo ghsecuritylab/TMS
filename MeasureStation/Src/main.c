@@ -244,16 +244,37 @@ static void lcd_start(void)
   BSP_LCD_SetTransparency(1, 255);
 }
 
+<<<<<<< HEAD
 uint32_t choose_color(int id) 
+=======
+uint32_t choose_color(int id)
+>>>>>>> id
 {
   uint32_t color = LCD_COLOR_BLACK;
   switch (id)
   {
+<<<<<<< HEAD
     case 0: color = LCD_COLOR_CYAN; break;
     case 1: color = LCD_COLOR_MAGENTA; break;
     case 2: color = LCD_COLOR_ORANGE; break;
     case 3: color = LCD_COLOR_RED; break;
     default: break;
+=======
+  case 0:
+    color = LCD_COLOR_CYAN;
+    break;
+  case 1:
+    color = LCD_COLOR_MAGENTA;
+    break;
+  case 2:
+    color = LCD_COLOR_ORANGE;
+    break;
+  case 3:
+    color = LCD_COLOR_RED;
+    break;
+  default:
+    break;
+>>>>>>> id
   }
   return color;
 }
@@ -279,7 +300,11 @@ void draw_background(void)
   uint16_t AY_y = 20;
   uint16_t AY_length = 200;
   BSP_LCD_DrawVLine(AY_x, AY_y, AY_length);
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> id
   /* Axis Y dart */
   Point y1, y2, y3;
   y1.X = AY_x;
@@ -288,7 +313,7 @@ void draw_background(void)
   y2.Y = AY_y + 10;
   y3.X = AY_x - 4;
   y3.Y = AY_y + 10;
-  Point pointsY[3] = {y1, y2, y3}; 
+  Point pointsY[3] = {y1, y2, y3};
   BSP_LCD_FillPolygon(pointsY, 3);
 
   /* Axis Y scale */
@@ -297,7 +322,11 @@ void draw_background(void)
     BSP_LCD_DrawHLine(116, y, 4);
     char buf[] = "";
     sprintf(buf, "%d", t);
+<<<<<<< HEAD
     BSP_LCD_DisplayStringAt(106, y, (uint8_t*) buf, LEFT_MODE);
+=======
+    BSP_LCD_DisplayStringAt(95, y - 5, (uint8_t *)buf, LEFT_MODE);
+>>>>>>> id
   }
   for (int y = 40; y < 220; y += 20)
   {
@@ -309,7 +338,11 @@ void draw_background(void)
   uint16_t AX_y = 130;
   uint16_t AX_length = 300;
   BSP_LCD_DrawHLine(AX_x - AX_length, AX_y, AX_length);
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> id
   /* Axis X dart */
   Point x1, x2, x3;
   x1.X = AX_x;
@@ -318,10 +351,11 @@ void draw_background(void)
   x2.Y = AX_y + 4;
   x3.X = AX_x - 10;
   x3.Y = AX_y - 4;
-  Point pointsX[3] = {x1, x2, x3}; 
+  Point pointsX[3] = {x1, x2, x3};
   BSP_LCD_FillPolygon(pointsX, 3);
 
   /* Plot caption */
+<<<<<<< HEAD
   for (int id = 0; id < MAX_SENSORS; id++) 
   {
     uint32_t color = choose_color(id);
@@ -335,6 +369,21 @@ void draw_background(void)
     BSP_LCD_DisplayStringAt(135 + id * 70, 245, (uint8_t*) buf, LEFT_MODE);
   }
   
+=======
+  for (int id = 0; id < MAX_SENSORS; id++)
+  {
+    uint32_t color = choose_color(id);
+    BSP_LCD_SetTextColor(color);
+    BSP_LCD_FillCircle(110 + id * 85, 245, 3);
+
+    char buf[] = "";
+    sprintf(buf, "-sensor%d", id + 1);
+    BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
+    BSP_LCD_SetFont(&Font12);
+    BSP_LCD_DisplayStringAt(116 + id * 85, 240, (uint8_t *)buf, LEFT_MODE);
+  }
+
+>>>>>>> id
   /* Select the LCD Foreground Layer */
   BSP_LCD_SelectLayer(1);
 }
@@ -353,7 +402,10 @@ void update_plot()
   (Y_0 - Y_max) / Y_value_max = 2
   (Y_0 - Y_min) / Y_value_min = 2
   */
+<<<<<<< HEAD
 
+=======
+>>>>>>> id
 
   /* Clear area of plot (without axes) */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
@@ -371,7 +423,12 @@ void update_plot()
     for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
     {
       double value = measurements[id][i];
+<<<<<<< HEAD
       if (value == -404) continue;
+=======
+      if (value == -404)
+        continue;
+>>>>>>> id
 
       uint16_t y = Y_0 - value * 2;
       uint16_t x = X_0 + (i + 1) * (X_length / MAX_MEASUREMENTS);
@@ -1628,9 +1685,13 @@ void clear_response_buffer()
 
 void save_measurement(int id, double measurement)
 {
-  for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+  for (int i = MAX_MEASUREMENTS - 1; i > 0; i--)
   {
+<<<<<<< HEAD
     measurements[id][i + 1] = measurements[id][i];
+=======
+    measurements[id][i] = measurements[id][i - 1];
+>>>>>>> id
   }
   measurements[id][0] = measurement;
 }
@@ -1657,8 +1718,17 @@ static void http_server_serve(struct netconn *conn)
       /* Is this an HTTP GET command? is it request for machine id?*/
       if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
       {
+<<<<<<< HEAD
         sprintf(response, "%d", sensorMinId);
         sensorMinId+=1;
+=======
+        strcpy(response, "HTTP/1.1 200 OK\r\n\
+          Content-Type: text/html\r\n\
+          Connection: close\r\n\
+          2\r\n"
+        );
+        sensorMinId += 1;
+>>>>>>> 3616da0bb24062620d58803be90936388b4a2d3f
         netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
       }
 
@@ -1690,9 +1760,19 @@ static void http_server_serve(struct netconn *conn)
 
         save_measurement(machineId - 1, temperatureInteger + (temperatureDecimal / 100));
         update_sensor_display(machineId, temperatureInteger, temperatureDecimal);
-		
+
         update_plot();
+<<<<<<< HEAD
         sprintf(response, "Ok.\n");
+=======
+
+        response[0] = 0;
+        strcpy(response, "HTTP/1.1 200 OK\r\n\
+          Content-Type: text/html\r\n\
+          Connection: close\r\n\n\
+          Ok \r\n"
+        );
+>>>>>>> 3616da0bb24062620d58803be90936388b4a2d3f
         netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
       }
     }
@@ -1711,13 +1791,15 @@ static void http_server_netconn_thread(void const *arg)
   struct netconn *conn, *newconn;
   err_t err, accept_err;
 
-  for (int i = 0; i < MAX_SENSORS; i++) {
-    for (int j = 0; j < MAX_MEASUREMENTS; j++) {
+  for (int i = 0; i < MAX_SENSORS; i++)
+  {
+    for (int j = 0; j < MAX_MEASUREMENTS; j++)
+    {
       measurements[i][j] = -404;
     }
   }
 
-    xprintf("http_server_netconn_thread\n");
+  xprintf("http_server_netconn_thread\n");
 
   /* Create a new TCP connection handle */
   conn = netconn_new(NETCONN_TCP);
