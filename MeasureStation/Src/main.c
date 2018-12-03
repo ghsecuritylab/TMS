@@ -369,7 +369,7 @@ void update_plot()
   BSP_LCD_FillRect(150, 130, 290, 90);
 
   /* Display measurment matrix */
-  for (int id = 0; id < MAX_SENSORS - 1; id++)
+  for (int id = 0; id < MAX_SENSORS; id++)
   {
     /* Choose color for one sensor */
     uint32_t color = choose_color(id);
@@ -389,7 +389,7 @@ void update_plot()
   }
 }
 
-void update_sensor_display(int id, int temperatureInteger, int temperatureDecimal)
+void update_sensor_display(int id, char sign, int temperatureInteger, int temperatureDecimal)
 {
   /* Display id of sensor */
   BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
@@ -412,6 +412,12 @@ void update_sensor_display(int id, int temperatureInteger, int temperatureDecima
   temp_buf[2] = '.';
   sprintf(temp_buf + 3, "%d", temperatureDecimal);
   BSP_LCD_DisplayStringAt(20, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
+  
+   /* Display sign, only if temperature is negative */
+  if (sign == '-')
+  {
+    BSP_LCD_DisplayChar(10, 34 + (id - 1) * 68, sign);
+  }
 }
 
 void clear_sensor_display(int id)
@@ -1623,6 +1629,7 @@ static void MX_GPIO_Init(void)
 
 static char response[BUFFER_SIZE];
 static char id[3];
+static char sign;
 static char temperatureIntegerPart[3];
 static char temperatureDecimalPart[3];
 static int sensorMinId = 1;
@@ -1668,15 +1675,17 @@ static void http_server_serve(struct netconn *conn)
       {
         strcpy(response, "HTTP/1.1 200 OK\r\n\
           Content-Type: text/html\r\n\
-          Connection: close\r\n\
-          2\r\n"
+          Connection: close\r\n\n"
         );
-        sensorMinId += 1;
+		    char *id = malloc(sizeof(char) * 2);
+        sprintf(id, "0%d", sensorMinId);
+		    strcat(response, id);
+		    sensorMinId += 1;
         netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
       }
 
       /*
-        Post the measure by get request the format is as follow 'GET /id=xx/temp=xx.xx'
+        Post the measure by get request the format is as follow 'GET /id=xx/temp=sxx.xx'
         We will parse the temperature for the machine of given id and then add it to measurements history
       */
       if ((buflen >= 21) && (strncmp(buf, "GET /id=", 8) == 0))
@@ -1685,10 +1694,11 @@ static void http_server_serve(struct netconn *conn)
         {
           id[i] = buf[8 + i];
         }
+		    sign = buf[16];
         for (int i = 0; i < 2; i++)
         {
-          temperatureIntegerPart[i] = buf[16 + i];
-          temperatureDecimalPart[i] = buf[19 + i];
+          temperatureIntegerPart[i] = buf[17 + i];
+          temperatureDecimalPart[i] = buf[20 + i];
         }
         id[2] = 0;
         temperatureIntegerPart[2] = 0;
@@ -1701,9 +1711,21 @@ static void http_server_serve(struct netconn *conn)
         int temperatureDecimal;
         sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
 
-        save_measurement(machineId - 1, temperatureInteger + (temperatureDecimal / 100));
-        update_sensor_display(machineId, temperatureInteger, temperatureDecimal);
-
+        double temperature;
+        if (sign == '+') 
+        {
+          temperature = temperatureInteger + (temperatureDecimal / 100);
+        }
+        else if (sign == '-')
+        {
+          temperature = - temperatureInteger - (temperatureDecimal / 100);
+        }
+        else
+        {
+          temperature = -404;
+        }
+        save_measurement(machineId - 1, temperature);
+        update_sensor_display(machineId, sign, temperatureInteger, temperatureDecimal);
         update_plot();
 
         response[0] = 0;
