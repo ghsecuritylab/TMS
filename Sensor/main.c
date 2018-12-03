@@ -28,11 +28,10 @@ const char *ssid = "esp";
 const char *password = "haslo8266";
 
 /* IP of MeasureStation (STM32F7) */
-const char *host = "http://192.168.0.101";
+String host = "http://192.168.0.103";
 
 /* ID of sensor (ESP8266) */
-const char *id = "01";
-String id_test;
+String id;
 int id_set = 0;
 
 //=======================================================================
@@ -150,14 +149,10 @@ void loop()
   {
     Link = host + String("/getid");
     http.begin(Link);
-    Serial.println(Link);
     int httpCode = http.GET();
-
     String payload = http.getString();
-    Serial.println(httpCode);
-    Serial.println(payload);
-    http.end();
-    id_test = payload;
+    id = payload; 
+    http.end(); 
     id_set = 1;
     delay(5000);
   }
@@ -172,7 +167,15 @@ void loop()
 
   /* Compose string to send via GET method */
   measure = String(tempC);
-  Link = host + String("/id=") + id + "/temp=" + measure;
+  if (tempC < 0)
+  {
+    measure = String("-") + measure;
+  }
+  else
+  {
+    measure = String("+") + measure;
+  }
+  Link = host + String("/id=") +  id.substring(0,2) +  String("/temp=") + measure;
   Serial.println(Link);
   http.begin(Link);          //Specify request destination
   int httpCode = http.GET(); //Send the request
