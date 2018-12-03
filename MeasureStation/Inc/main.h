@@ -407,18 +407,4 @@ void _Error_Handler(char *, int);
 
 #endif /* __MAIN_H__ */
 
-typedef struct graph graph;
-
-struct graph {
-  int **table;
-  int *integerTemperature;
-  int *decimalTemperature;
-  int valid;
-}
-
-#define BUFFER_SIZE 500
-#define MAX_SENSORS 4
-#define MAX_MEASUREMENTS 10
-#define NR_LEVELS 10
-
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
