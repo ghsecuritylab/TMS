@@ -6,6 +6,7 @@
  * https://circuits4you.com 
  * Connects to WiFi HotSpot. */
 
+#include "FS.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
@@ -28,7 +29,7 @@ const char *ssid = "esp";
 const char *password = "haslo8266";
 
 /* IP of MeasureStation (STM32F7) */
-String host = "http://192.168.0.103";
+String host = "http://192.168.0.102";
 
 /* ID of sensor (ESP8266) */
 String id;
@@ -134,27 +135,42 @@ void setup()
 
   //Setup DS18b20 temperature sensor
   SetupDS18B20();
-}
 
-//=======================================================================
-//                    Main Program Loop
-//=======================================================================
-void loop()
-{
+  //-------------------------------------------------
+
   HTTPClient http; //Declare object of class HTTPClient
   String measure, Link;
   float tempC;
+  String path = "/id.txt";
 
-  if (id_set == 0)
+  SPIFFS.begin();
+
+  if (SPIFFS.exists(path))
+  {
+    //read id
+    File f = SPIFFS.open(path, "r");
+    id = f.readStringUntil('\n');
+    f.close();
+  }
+  else
   {
     Link = host + String("/getid");
     http.begin(Link);
     int httpCode = http.GET();
     String payload = http.getString();
     id = payload; 
-    http.end(); 
-    id_set = 1;
-    delay(5000);
+    http.end();
+
+    Serial.println(id);
+    
+    //save id in file
+    File f = SPIFFS.open(path, "w");
+    
+    if(!f){
+      Serial.println("failed1");
+    }
+    f.println(id);
+    f.close();  
   }
 
   /* Get measure from DS18B20 sensor */
@@ -185,6 +201,17 @@ void loop()
   Serial.println(payload);           //Print request response payload
 
   http.end();  //Close connection
-  delay(5000); //GET Data at every 5 seconds
+
+  Serial.println("Going into deep sleep for 5 seconds");
+  ESP.deepSleep(5e6); // 5e6 is 5 microseconds
+
+}
+
+//=======================================================================
+//                    Main Program Loop
+//=======================================================================
+void loop()
+{
+ 
 }
 //=======================================================================
