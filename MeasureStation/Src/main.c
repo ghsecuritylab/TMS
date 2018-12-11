@@ -401,7 +401,7 @@ void update_sensor_display(int id, char sign, int temperatureInteger, int temper
 
   /* Clear line of previous measurment */
   BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-  BSP_LCD_FillRect(20, 34 + (id - 1) * 68, 64, 25);
+  BSP_LCD_FillRect(10, 34 + (id - 1) * 68, 64, 25);
 
   /* Display value of latest measurement */
   BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
