@@ -267,5 +267,8 @@ static void http_server_serve(struct netconn *conn)
 ```
 
 Zgodnie z powyzszym kodem oraz zamieszczonymi w nim komentarzami, przygotowaliśmy nasz serwer do obsługi dwóch rodzajów komend: 
-a) GET /getid - która zwraca id dla nowo podłączonej stacji pomiarowej
-b) GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy uzyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie. Gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. Do przesłania informacji uywawamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
+
+1. GET /getid - która zwraca id dla nowo podłączonej stacji pomiarowej
+2. GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy uzyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie. Gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. 
+   
+Do przesłania informacji uywawamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
