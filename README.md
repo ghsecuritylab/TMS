@@ -40,6 +40,29 @@ void save_measurement(int id, double measurement)
   }
   measurements[id][0] = measurement;
 }
+
+uint32_t choose_color(int id)
+{
+  uint32_t color = LCD_COLOR_BLACK;
+  switch (id)
+  {
+  case 0:
+    color = LCD_COLOR_CYAN;
+    break;
+  case 1:
+    color = LCD_COLOR_MAGENTA;
+    break;
+  case 2:
+    color = LCD_COLOR_ORANGE;
+    break;
+  case 3:
+    color = LCD_COLOR_RED;
+    break;
+  default:
+    break;
+  }
+  return color;
+}
 ```
 ### Interfejs graficzny
 
@@ -78,29 +101,6 @@ static void lcd_start(void)
      Increase the transparency */
   BSP_LCD_SetTransparency(0, 255);
   BSP_LCD_SetTransparency(1, 255);
-}
-
-uint32_t choose_color(int id)
-{
-  uint32_t color = LCD_COLOR_BLACK;
-  switch (id)
-  {
-  case 0:
-    color = LCD_COLOR_CYAN;
-    break;
-  case 1:
-    color = LCD_COLOR_MAGENTA;
-    break;
-  case 2:
-    color = LCD_COLOR_ORANGE;
-    break;
-  case 3:
-    color = LCD_COLOR_RED;
-    break;
-  default:
-    break;
-  }
-  return color;
 }
 
 void draw_background(void)
@@ -267,7 +267,7 @@ void clear_sensor_display(int id)
 ### Serwer HTTP
 
 W projekcie startowym znajdował się już szkic serwera HTTP.
-Poniżej przedstawiamy zmiany, które zostały dokonane w istniejącym projekcie w funkcji http_server_serve.
+Poniżej przedstawiamy zmiany, które zostały dokonane w istniejącym projekcie w funkcji `http_server_serve`.
 
 ```c
 //based on available code examples
@@ -372,7 +372,6 @@ Zgodnie z powyższym kodem oraz zamieszczonymi w nim komentarzami, przygotowali�
 2. GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy użyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie, gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. 
    
 Do przesłania informacji używamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
-
 
 ## Sensor
 
@@ -516,4 +515,28 @@ lub http://www.advanced-monolithic.com/pdf/ds1117.pdf)
 
 ## Dokumentacja fotograficzna projektu
 
-TODO
+Całość systemu:
+
+![system_view][Photos/system_view.jpg]
+
+Interfejs:
+
+![gui][Photos/gui1.jpg]
+
+![gui][Photos/gui4.jpg]
+
+Sensor - nodeMCU:
+
+![gui][Photos/nodemcu.jpg]
+
+Pomiary:
+
+![gui][Photos/measurements.jpg]
+
+![gui][Photos/cable.jpg]
+
+Wyniki:
+
+![gui][Photos/m1.jpg]
+
+![gui][Photos/m2.jpg]
