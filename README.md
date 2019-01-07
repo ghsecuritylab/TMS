@@ -8,9 +8,15 @@ TODO
 
 Nasz projekt oparliśmy o projekt startowy dla płytki STM32F746, dostępny pod adresem: http://home.agh.edu.pl/~rabw/sw/swlab.html. 
 Po odpowiednim uporządkowaniu oraz oczyszczeniu kodu z niepotrzebnych nam funkcjonalności dodaliśmy potrzebne nam funkcje. 
-Na początku zadeklarowaliśmy kilka potrzebnych nam zmiennych oraz zdefiniowaliśmy funkcje pomocnicze, które przydadzą się nam w dalszym projekcie.
+Na początku zadeklarowaliśmy kilka potrzebnych nam stałych i zmiennych oraz zdefiniowaliśmy funkcje pomocnicze.
 
 ```c
+#define BUFFER_SIZE 500
+#define MAX_SENSORS 4
+#define MAX_MEASUREMENTS 10
+#define NR_LEVELS 10
+
+static double measurements[MAX_SENSORS][MAX_MEASUREMENTS];
 static char response[BUFFER_SIZE];
 static char id[3];
 static char sign;
@@ -35,14 +41,235 @@ void save_measurement(int id, double measurement)
   measurements[id][0] = measurement;
 }
 ```
+### Interfejs graficzny
+
+```c
+//partially based on available code examples
+static void lcd_start(void)
+{
+  /* LCD Initialization */
+  BSP_LCD_Init();
+
+  /* LCD Initialization */
+  BSP_LCD_LayerDefaultInit(0, (unsigned int)0xC0000000);
+  //BSP_LCD_LayerDefaultInit(1, (unsigned int)lcd_image_bg+(LCD_X_SIZE*LCD_Y_SIZE*4));
+  BSP_LCD_LayerDefaultInit(1, (unsigned int)0xC0000000 + (LCD_X_SIZE * LCD_Y_SIZE * 4));
+
+  /* Enable the LCD */
+  BSP_LCD_DisplayOn();
+
+  /* Select the LCD Background Layer  */
+  BSP_LCD_SelectLayer(0);
+
+  /* Clear the Background Layer */
+  BSP_LCD_Clear(LCD_COLOR_WHITE);
+  BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+
+  BSP_LCD_SetColorKeying(1, LCD_COLOR_WHITE);
+
+  /* Select the LCD Foreground Layer  */
+  BSP_LCD_SelectLayer(1);
+
+  /* Clear the Foreground Layer */
+  BSP_LCD_Clear(LCD_COLOR_WHITE);
+  BSP_LCD_SetBackColor(LCD_COLOR_WHITE);
+
+  /* Configure the transparency for foreground and background :
+     Increase the transparency */
+  BSP_LCD_SetTransparency(0, 255);
+  BSP_LCD_SetTransparency(1, 255);
+}
+
+uint32_t choose_color(int id)
+{
+  uint32_t color = LCD_COLOR_BLACK;
+  switch (id)
+  {
+  case 0:
+    color = LCD_COLOR_CYAN;
+    break;
+  case 1:
+    color = LCD_COLOR_MAGENTA;
+    break;
+  case 2:
+    color = LCD_COLOR_ORANGE;
+    break;
+  case 3:
+    color = LCD_COLOR_RED;
+    break;
+  default:
+    break;
+  }
+  return color;
+}
+
+void draw_background(void)
+{
+  /* Select the LCD Background Layer  */
+  BSP_LCD_SelectLayer(0);
+  BSP_LCD_SetTextColor(LCD_COLOR_DARKGRAY);
+
+  /* Draw simple grid for sensors display */
+  BSP_LCD_DrawVLine(90, 0, LCD_Y_SIZE);
+  BSP_LCD_DrawHLine(0, 68, 90);
+  BSP_LCD_DrawHLine(0, 136, 90);
+  BSP_LCD_DrawHLine(0, 204, 90);
+
+  /* Temperature axes with darts */
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+  BSP_LCD_SetFont(&Font12);
+
+  /* Axis Y */
+  uint16_t AY_x = 150;
+  uint16_t AY_y = 20;
+  uint16_t AY_length = 200;
+  BSP_LCD_DrawVLine(AY_x, AY_y, AY_length);
+
+  /* Axis Y dart */
+  Point y1, y2, y3;
+  y1.X = AY_x;
+  y1.Y = AY_y;
+  y2.X = AY_x + 4;
+  y2.Y = AY_y + 10;
+  y3.X = AY_x - 4;
+  y3.Y = AY_y + 10;
+  Point pointsY[3] = {y1, y2, y3};
+  BSP_LCD_FillPolygon(pointsY, 3);
+
+  /* Axis Y scale */
+  for (int y = 30, t = 50; y < 220 && t > -40; y += 20, t -= 10)
+  {
+    BSP_LCD_DrawHLine(146, y, 4);
+    char buf[] = "";
+    sprintf(buf, "%d", t);
+    BSP_LCD_DisplayStringAt(125, y - 5, (uint8_t *)buf, LEFT_MODE);
+  }
+  for (int y = 40; y < 220; y += 20)
+  {
+    BSP_LCD_DrawHLine(148, y, 2);
+  }
+
+  /* Axis X */
+  uint16_t AX_x = 450;
+  uint16_t AX_y = 130;
+  uint16_t AX_length = 300;
+  BSP_LCD_DrawHLine(AX_x - AX_length, AX_y, AX_length);
+
+  /* Axis X dart */
+  Point x1, x2, x3;
+  x1.X = AX_x;
+  x1.Y = AX_y;
+  x2.X = AX_x - 10;
+  x2.Y = AX_y + 4;
+  x3.X = AX_x - 10;
+  x3.Y = AX_y - 4;
+  Point pointsX[3] = {x1, x2, x3};
+  BSP_LCD_FillPolygon(pointsX, 3);
+
+  /* Plot caption */
+  for (int id = 0; id < MAX_SENSORS; id++)
+  {
+    uint32_t color = choose_color(id);
+    BSP_LCD_SetTextColor(color);
+    BSP_LCD_FillCircle(140 + id * 85, 245, 3);
+
+    char buf[] = "";
+    sprintf(buf, "-sensor%d", id + 1);
+    BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
+    BSP_LCD_SetFont(&Font12);
+    BSP_LCD_DisplayStringAt(146 + id * 85, 240, (uint8_t *)buf, LEFT_MODE);
+  }
+
+  /* Select the LCD Foreground Layer */
+  BSP_LCD_SelectLayer(1);
+}
+
+void update_plot()
+{
+  /* Plot coordinates and constants */
+  uint16_t X_0 = 150;
+  uint16_t X_length = 290;
+  uint16_t Y_0 = 130;
+  /*
+  uint16_t Y_min = 210;
+  uint16_t Y_max = 30;
+  int16_t Y_value_min = -40;
+  int16_t Y_value_max = 50;
+  (Y_0 - Y_max) / Y_value_max = 2
+  (Y_0 - Y_min) / Y_value_min = 2
+  */
+
+  /* Clear area of plot (without axes) */
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(150, 30, 290, 100);
+  BSP_LCD_FillRect(150, 130, 290, 90);
+
+  /* Display measurment matrix */
+  for (int id = 0; id < MAX_SENSORS; id++)
+  {
+    /* Choose color for one sensor */
+    uint32_t color = choose_color(id);
+    BSP_LCD_SetTextColor(color);
+
+    /* Display last values from one sensor */
+    for (int i = 0; i < MAX_MEASUREMENTS - 1; i++)
+    {
+      double value = measurements[id][i];
+      if (value == -404)
+        continue;
+
+      uint16_t y = Y_0 - value * 2;
+      uint16_t x = X_0 + (i + 1) * (X_length / MAX_MEASUREMENTS);
+      BSP_LCD_FillCircle(x, y, 2);
+    }
+  }
+}
+
+void update_sensor_display(int id, char sign, int temperatureInteger, int temperatureDecimal)
+{
+  /* Display id of sensor */
+  BSP_LCD_SetTextColor(LCD_COLOR_GRAY);
+  BSP_LCD_SetFont(&Font12);
+
+  char id_buf[] = {0};
+  sprintf(id_buf, "%d", id);
+  BSP_LCD_DisplayStringAt(40, 10 + (id - 1) * 68, (uint8_t *)id_buf, LEFT_MODE);
+
+  /* Clear line of previous measurment */
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(10, 34 + (id - 1) * 68, 64, 25);
+
+  /* Display value of latest measurement */
+  BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+  BSP_LCD_SetFont(&Font16);
+
+  char temp_buf[6] = {0};
+  sprintf(temp_buf, "%d", temperatureInteger);
+  temp_buf[2] = '.';
+  sprintf(temp_buf + 3, "%d", temperatureDecimal);
+  BSP_LCD_DisplayStringAt(20, 34 + (id - 1) * 68, (uint8_t *)temp_buf, LEFT_MODE);
+  
+   /* Display sign, only if temperature is negative */
+  if (sign == '-')
+  {
+    BSP_LCD_DisplayChar(10, 34 + (id - 1) * 68, sign);
+  }
+}
+
+void clear_sensor_display(int id)
+{
+  /* Clear one quarter if sensor goes away */
+  BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+  BSP_LCD_FillRect(0, 1 + (id - 1) * 68, 89, 67);
+}
+```
 
 ### Serwer HTTP
 
-W projekcie startowym znajdował się juz szkic serwera HTTP.
+W projekcie startowym znajdował się już szkic serwera HTTP.
 Poniżej przedstawiamy zmiany, które zostały dokonane w istniejącym projekcie w funkcji http_server_serve.
 
 ```c
-
 //based on available code examples
 static void http_server_serve(struct netconn *conn)
 {
