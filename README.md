@@ -1,23 +1,158 @@
-# TMS
-Temperature Measure Station
+# TMS - Temperature Measure Station
 
-# Sensor
+## Wstęp
 
-### Energooszczędność
+TODO
 
-średnie natężenie prądu
+## MeasureStation
 
-Stan pracy  : 75 mA
+Nasz projekt oparliśmy o projekt startowy dla płytki STM32F746, dostępny pod adresem: http://home.agh.edu.pl/~rabw/sw/swlab.html. 
+Po odpowiednim uporządkowaniu oraz oczyszczeniu kodu z niepotrzebnych nam funkcjonalności dodaliśmy potrzebne nam funkcje. 
+Na początku zadeklarowaliśmy kilka potrzebnych nam zmiennych oraz zdefiniowaliśmy funkcje pomocnicze, które przydadzą się nam w dalszym projekcie.
 
-Stan uśpienia: 3.1 mA
+```c
+static char response[BUFFER_SIZE];
+static char id[3];
+static char sign;
+static char temperatureIntegerPart[3];
+static char temperatureDecimalPart[3];
+static int sensorMinId = 1;
 
-Quiescent Current: 5 mA dla 12 V  
+void clear_response_buffer()
+{
+  for (int i = 0; i < BUFFER_SIZE; i++)
+  {
+    response[i] = 0;
+  }
+}
 
-AMS1117
+void save_measurement(int id, double measurement)
+{
+  for (int i = MAX_MEASUREMENTS - 1; i > 0; i--)
+  {
+    measurements[id][i] = measurements[id][i - 1];
+  }
+  measurements[id][0] = measurement;
+}
+```
 
-3.3 LD 518
+### Serwer HTTP
 
-źródło: http://html.alldatasheet.com/html-pdf/205691/ADMOS/AMS1117-3.3/474/3/AMS1117-3.3.html
+W projekcie startowym znajdował się juz szkic serwera HTTP.
+Poniżej przedstawiamy zmiany, które zostały dokonane w istniejącym projekcie w funkcji http_server_serve.
+
+```c
+
+//based on available code examples
+static void http_server_serve(struct netconn *conn)
+{
+  xprintf(".");
+  struct netbuf *inbuf;
+  err_t recv_err;
+  char *buf;
+  u16_t buflen;
+
+  /* Read the data from the port, blocking if nothing yet there. 
+   We assume the request (the part we care about) is in one netbuf */
+  recv_err = netconn_recv(conn, &inbuf);
+
+  if (recv_err == ERR_OK)
+  {
+    if (netconn_err(conn) == ERR_OK)
+    {
+      netbuf_data(inbuf, (void **)&buf, &buflen);
+      void clear_response_buffer();
+      /* Is this an HTTP GET command? is it request for machine id?*/
+      if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
+      {
+        strcpy(response, "HTTP/1.1 200 OK\r\n\
+          Content-Type: text/html\r\n\
+          Connection: close\r\n\n"
+        );
+		    char *id = malloc(sizeof(char) * 2);
+        sprintf(id, "0%d", sensorMinId);
+		    strcat(response, id);
+		    sensorMinId += 1;
+        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
+      }
+
+      /*
+        Post the measure by get request the format is as follow 'GET /id=xx/temp=sxx.xx'
+        We will parse the temperature for the machine of given id and then add it to measurements history
+      */
+      if ((buflen >= 21) && (strncmp(buf, "GET /id=", 8) == 0))
+      {
+        for (int i = 0; i < 2; i++)
+        {
+          id[i] = buf[8 + i];
+        }
+		    sign = buf[16];
+        for (int i = 0; i < 2; i++)
+        {
+          temperatureIntegerPart[i] = buf[17 + i];
+          temperatureDecimalPart[i] = buf[20 + i];
+        }
+        id[2] = 0;
+        temperatureIntegerPart[2] = 0;
+        temperatureDecimalPart[2] = 0;
+
+        int machineId;
+        sscanf(id, "%d", &machineId);
+        int temperatureInteger;
+        sscanf(temperatureIntegerPart, "%d", &temperatureInteger);
+        int temperatureDecimal;
+        sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
+
+        double temperature;
+        if (sign == '+') 
+        {
+          temperature = temperatureInteger + (temperatureDecimal / 100);
+        }
+        else if (sign == '-')
+        {
+          temperature = - temperatureInteger - (temperatureDecimal / 100);
+        }
+        else
+        {
+          temperature = -404; //error
+        }
+        save_measurement(machineId - 1, temperature);
+        update_sensor_display(machineId, sign, temperatureInteger, temperatureDecimal);
+        update_plot();
+
+        response[0] = 0;
+        strcpy(response, "HTTP/1.1 200 OK\r\n\
+          Content-Type: text/html\r\n\
+          Connection: close\r\n\n\
+          Ok \r\n"
+        );
+        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
+      }
+    }
+  }
+  /* Close the connection (server closes in HTTP) */
+  netconn_close(conn);
+
+  /* Delete the buffer (netconn_recv gives us ownership,
+   so we have to make sure to deallocate the buffer) */
+  netbuf_delete(inbuf);
+}
+```
+
+Zgodnie z powyższym kodem oraz zamieszczonymi w nim komentarzami, przygotowaliśmy nasz serwer do obsługi dwóch rodzajów komend: 
+
+1. GET /getid - która zwraca id dla nowo podłączonej stacji pomiarowej
+2. GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy użyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie, gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. 
+   
+Do przesłania informacji używamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
+
+
+## Sensor
+
+Do stworzenia oprogramowania płytki ESP8266 (nodeMCU) wykorzystaliśmy następujące przykłady:
+1. obsługa jednego lub wielusensorów DS18B20: https://www.instructables.com/id/ESP8266-and-Multiple-Temperature-Sensors-DS18b20-W/
+2. klient HTTP, wysyłający pomiary metodą GET: https://circuits4you.com/2018/03/10/esp8266-http-get-request-example/
+3. energooszczędność, z użyciem funkcji _deep-sleep_: https://www.losant.com/blog/making-the-esp8266-low-powered-with-deep-sleep 
 
 konfiguracja:
 ```c
@@ -30,7 +165,6 @@ String host = "http://192.168.0.102"; // static routing
 
 /* ID of sensor (ESP8266) */
 String id;
-int id_set = 0;
 ```
 
 setup:
@@ -134,141 +268,25 @@ void setup()
   ESP.deepSleep(5e6); // 5e6 is 5 microseconds
 
 }
-```
-# MeasureStation
 
-Nasz projekt oparliśmy o projekt startowy dla płytki stm32f746. Po odpowiednim uporządkowaniu oraz oczyszczeniu kodu z niepotrzebnych nam funkcjonalności dodaliśmy potrzebne nam funkcje. Na początku zadeklarowaliśmy kilka potrzebnych nam zmiennych oraz zdefiniowaliśmy funkcje pomocnicze, które przydadzą się nam w dalszym projekcie.
-
-```c
-static char response[BUFFER_SIZE];
-static char id[3];
-static char sign;
-static char temperatureIntegerPart[3];
-static char temperatureDecimalPart[3];
-static int sensorMinId = 1;
-
-void clear_response_buffer()
+void loop()
 {
-  for (int i = 0; i < BUFFER_SIZE; i++)
-  {
-    response[i] = 0;
-  }
-}
-
-void save_measurement(int id, double measurement)
-{
-  for (int i = MAX_MEASUREMENTS - 1; i > 0; i--)
-  {
-    measurements[id][i] = measurements[id][i - 1];
-  }
-  measurements[id][0] = measurement;
+ 
 }
 ```
 
-W projekcie startowym znajdował się juz szkic serwera http.
-Ponizej przedstawiamy zmiany które zostały dokonane w istniejącym projekcie w funkcji http_server_serve.
+### Energooszczędność
 
-```c
+Podczas laboratorium wykonaliśmy pomiary średniego natężenia prądu pobieranego przez sensor (nodeMCU).
+Wyniki są następujące:
 
-//based on available code examples
-static void http_server_serve(struct netconn *conn)
-{
-  xprintf(".");
-  struct netbuf *inbuf;
-  err_t recv_err;
-  char *buf;
-  u16_t buflen;
+1. stan pracy : 75 mA
+2. stan uśpienia : 3.1 mA
 
-  /* Read the data from the port, blocking if nothing yet there. 
-   We assume the request (the part we care about) is in one netbuf */
-  recv_err = netconn_recv(conn, &inbuf);
+Natomiast dla stablizatora AMS1117 3.3 LD 518, parametr _Quiescent Current_ wynosi 5 mA (dla 12 V) 
+(zgodnie z dokumentacją, źródło: http://html.alldatasheet.com/html-pdf/205691/ADMOS/AMS1117-3.3/474/3/AMS1117-3.3.html
+lub http://www.advanced-monolithic.com/pdf/ds1117.pdf)
 
-  if (recv_err == ERR_OK)
-  {
-    if (netconn_err(conn) == ERR_OK)
-    {
-      netbuf_data(inbuf, (void **)&buf, &buflen);
-      void clear_response_buffer();
-      /* Is this an HTTP GET command? is it request for machine id?*/
-      if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
-      {
-        strcpy(response, "HTTP/1.1 200 OK\r\n\
-          Content-Type: text/html\r\n\
-          Connection: close\r\n\n"
-        );
-		    char *id = malloc(sizeof(char) * 2);
-        sprintf(id, "0%d", sensorMinId);
-		    strcat(response, id);
-		    sensorMinId += 1;
-        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
-      }
+## Dokumentacja fotograficzna projektu
 
-      /*
-        Post the measure by get request the format is as follow 'GET /id=xx/temp=sxx.xx'
-        We will parse the temperature for the machine of given id and then add it to measurements history
-      */
-      if ((buflen >= 21) && (strncmp(buf, "GET /id=", 8) == 0))
-      {
-        for (int i = 0; i < 2; i++)
-        {
-          id[i] = buf[8 + i];
-        }
-		    sign = buf[16];
-        for (int i = 0; i < 2; i++)
-        {
-          temperatureIntegerPart[i] = buf[17 + i];
-          temperatureDecimalPart[i] = buf[20 + i];
-        }
-        id[2] = 0;
-        temperatureIntegerPart[2] = 0;
-        temperatureDecimalPart[2] = 0;
-
-        int machineId;
-        sscanf(id, "%d", &machineId);
-        int temperatureInteger;
-        sscanf(temperatureIntegerPart, "%d", &temperatureInteger);
-        int temperatureDecimal;
-        sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
-
-        double temperature;
-        if (sign == '+') 
-        {
-          temperature = temperatureInteger + (temperatureDecimal / 100);
-        }
-        else if (sign == '-')
-        {
-          temperature = - temperatureInteger - (temperatureDecimal / 100);
-        }
-        else
-        {
-          temperature = -404; //error
-        }
-        save_measurement(machineId - 1, temperature);
-        update_sensor_display(machineId, sign, temperatureInteger, temperatureDecimal);
-        update_plot();
-
-        response[0] = 0;
-        strcpy(response, "HTTP/1.1 200 OK\r\n\
-          Content-Type: text/html\r\n\
-          Connection: close\r\n\n\
-          Ok \r\n"
-        );
-        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
-      }
-    }
-  }
-  /* Close the connection (server closes in HTTP) */
-  netconn_close(conn);
-
-  /* Delete the buffer (netconn_recv gives us ownership,
-   so we have to make sure to deallocate the buffer) */
-  netbuf_delete(inbuf);
-}
-```
-
-Zgodnie z powyzszym kodem oraz zamieszczonymi w nim komentarzami, przygotowaliśmy nasz serwer do obsługi dwóch rodzajów komend: 
-
-1. GET /getid - która zwraca id dla nowo podłączonej stacji pomiarowej
-2. GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy uzyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie. Gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. 
-   
-Do przesłania informacji uywawamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
+TODO
