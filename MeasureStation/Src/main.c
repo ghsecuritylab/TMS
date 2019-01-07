@@ -170,15 +170,7 @@ osThreadId netconn_thread_handle;
 
 #define LCD_X_SIZE RK043FN48H_WIDTH
 #define LCD_Y_SIZE RK043FN48H_HEIGHT
-
-#define BUFFER_SIZE 500
-#define MAX_SENSORS 4
-#define MAX_MEASUREMENTS 10
-#define NR_LEVELS 10
-
 #define PRINTF_USES_HAL_TX 0
-
-static double measurements[MAX_SENSORS][MAX_MEASUREMENTS];
 
 int __io_putchar(int ch)
 {
@@ -208,6 +200,75 @@ char inkey(void)
     return 0;
 }
 
+//static TS_StateTypeDef  TS_State;
+
+int initialize_touchscreen(void)
+{
+  uint8_t status = 0;
+  status = BSP_TS_Init(BSP_LCD_GetXSize(), BSP_LCD_GetYSize());
+  if (status != TS_OK)
+    return -1;
+  return 0;
+}
+
+
+/* =============================================================================== */
+/* CONST & VARIABLES ------------------------------------------------------------- */
+#define BUFFER_SIZE 500
+#define MAX_SENSORS 4
+#define MAX_MEASUREMENTS 10
+#define NR_LEVELS 10
+
+static double measurements[MAX_SENSORS][MAX_MEASUREMENTS];
+static char response[BUFFER_SIZE];
+static char id[3];
+static char sign;
+static char temperatureIntegerPart[3];
+static char temperatureDecimalPart[3];
+static int sensorMinId = 1;
+
+/* HELPER FUNCTIONS -------------------------------------------------------------- */
+void clear_response_buffer()
+{
+  for (int i = 0; i < BUFFER_SIZE; i++)
+  {
+    response[i] = 0;
+  }
+}
+
+void save_measurement(int id, double measurement)
+{
+  for (int i = MAX_MEASUREMENTS - 1; i > 0; i--)
+  {
+    measurements[id][i] = measurements[id][i - 1];
+  }
+  measurements[id][0] = measurement;
+}
+
+uint32_t choose_color(int id)
+{
+  uint32_t color = LCD_COLOR_BLACK;
+  switch (id)
+  {
+  case 0:
+    color = LCD_COLOR_CYAN;
+    break;
+  case 1:
+    color = LCD_COLOR_MAGENTA;
+    break;
+  case 2:
+    color = LCD_COLOR_ORANGE;
+    break;
+  case 3:
+    color = LCD_COLOR_RED;
+    break;
+  default:
+    break;
+  }
+  return color;
+}
+
+/* GUI  ------------------------------------------------------------------------ */
 //partially based on available code examples
 static void lcd_start(void)
 {
@@ -242,29 +303,6 @@ static void lcd_start(void)
      Increase the transparency */
   BSP_LCD_SetTransparency(0, 255);
   BSP_LCD_SetTransparency(1, 255);
-}
-
-uint32_t choose_color(int id)
-{
-  uint32_t color = LCD_COLOR_BLACK;
-  switch (id)
-  {
-  case 0:
-    color = LCD_COLOR_CYAN;
-    break;
-  case 1:
-    color = LCD_COLOR_MAGENTA;
-    break;
-  case 2:
-    color = LCD_COLOR_ORANGE;
-    break;
-  case 3:
-    color = LCD_COLOR_RED;
-    break;
-  default:
-    break;
-  }
-  return color;
 }
 
 void draw_background(void)
@@ -427,16 +465,148 @@ void clear_sensor_display(int id)
   BSP_LCD_FillRect(0, 1 + (id - 1) * 68, 89, 67);
 }
 
-//static TS_StateTypeDef  TS_State;
-
-int initialize_touchscreen(void)
+/* HTTP SERVER ------------------------------------------------------------------- */
+//based on available code examples
+static void http_server_serve(struct netconn *conn)
 {
-  uint8_t status = 0;
-  status = BSP_TS_Init(BSP_LCD_GetXSize(), BSP_LCD_GetYSize());
-  if (status != TS_OK)
-    return -1;
-  return 0;
+  xprintf(".");
+  struct netbuf *inbuf;
+  err_t recv_err;
+  char *buf;
+  u16_t buflen;
+
+  /* Read the data from the port, blocking if nothing yet there. 
+   We assume the request (the part we care about) is in one netbuf */
+  recv_err = netconn_recv(conn, &inbuf);
+
+  if (recv_err == ERR_OK)
+  {
+    if (netconn_err(conn) == ERR_OK)
+    {
+      netbuf_data(inbuf, (void **)&buf, &buflen);
+      void clear_response_buffer();
+      /* Is this an HTTP GET command? is it request for machine id?*/
+      if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
+      {
+        strcpy(response, "HTTP/1.1 200 OK\r\n\
+          Content-Type: text/html\r\n\
+          Connection: close\r\n\n"
+        );
+		    char *id = malloc(sizeof(char) * 2);
+        sprintf(id, "0%d", sensorMinId);
+		    strcat(response, id);
+		    sensorMinId += 1;
+        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
+      }
+
+      /*
+        Post the measure by get request the format is as follow 'GET /id=xx/temp=sxx.xx'
+        We will parse the temperature for the machine of given id and then add it to measurements history
+      */
+      if ((buflen >= 21) && (strncmp(buf, "GET /id=", 8) == 0))
+      {
+        for (int i = 0; i < 2; i++)
+        {
+          id[i] = buf[8 + i];
+        }
+		    sign = buf[16];
+        for (int i = 0; i < 2; i++)
+        {
+          temperatureIntegerPart[i] = buf[17 + i];
+          temperatureDecimalPart[i] = buf[20 + i];
+        }
+        id[2] = 0;
+        temperatureIntegerPart[2] = 0;
+        temperatureDecimalPart[2] = 0;
+
+        int machineId;
+        sscanf(id, "%d", &machineId);
+        int temperatureInteger;
+        sscanf(temperatureIntegerPart, "%d", &temperatureInteger);
+        int temperatureDecimal;
+        sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
+
+        double temperature;
+        if (sign == '+') 
+        {
+          temperature = temperatureInteger + (temperatureDecimal / 100);
+        }
+        else if (sign == '-')
+        {
+          temperature = - temperatureInteger - (temperatureDecimal / 100);
+        }
+        else
+        {
+          temperature = -404;
+        }
+        save_measurement(machineId - 1, temperature);
+        update_sensor_display(machineId, sign, temperatureInteger, temperatureDecimal);
+        update_plot();
+
+        response[0] = 0;
+        strcpy(response, "HTTP/1.1 200 OK\r\n\
+          Content-Type: text/html\r\n\
+          Connection: close\r\n\n\
+          Ok \r\n"
+        );
+        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
+      }
+    }
+  }
+  /* Close the connection (server closes in HTTP) */
+  netconn_close(conn);
+
+  /* Delete the buffer (netconn_recv gives us ownership,
+   so we have to make sure to deallocate the buffer) */
+  netbuf_delete(inbuf);
 }
+
+//based on available code examples
+static void http_server_netconn_thread(void const *arg)
+{
+  struct netconn *conn, *newconn;
+  err_t err, accept_err;
+
+  for (int i = 0; i < MAX_SENSORS; i++)
+  {
+    for (int j = 0; j < MAX_MEASUREMENTS; j++)
+    {
+      measurements[i][j] = -404;
+    }
+  }
+
+  xprintf("http_server_netconn_thread\n");
+
+  /* Create a new TCP connection handle */
+  conn = netconn_new(NETCONN_TCP);
+
+  if (conn != NULL)
+  {
+    /* Bind to port 80 (HTTP) with default IP address */
+    err = netconn_bind(conn, NULL, 80);
+
+    if (err == ERR_OK)
+    {
+      /* Put the connection into LISTEN state */
+      netconn_listen(conn);
+      while (1)
+      {
+        /* accept any icoming connection */
+        accept_err = netconn_accept(conn, &newconn);
+        if (accept_err == ERR_OK)
+        {
+          /* serve connection */
+          http_server_serve(newconn);
+
+          /* delete connection */
+          netconn_delete(newconn);
+        }
+      }
+    }
+  }
+}
+/* ------------------------------------------------------------------------------- */
+/* =============================================================================== */
 
 /* USER CODE END 0 */
 
@@ -1626,170 +1796,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
-static char response[BUFFER_SIZE];
-static char id[3];
-static char sign;
-static char temperatureIntegerPart[3];
-static char temperatureDecimalPart[3];
-static int sensorMinId = 1;
-
-void clear_response_buffer()
-{
-  for (int i = 0; i < BUFFER_SIZE; i++)
-  {
-    response[i] = 0;
-  }
-}
-
-void save_measurement(int id, double measurement)
-{
-  for (int i = MAX_MEASUREMENTS - 1; i > 0; i--)
-  {
-    measurements[id][i] = measurements[id][i - 1];
-  }
-  measurements[id][0] = measurement;
-}
-
-//based on available code examples
-static void http_server_serve(struct netconn *conn)
-{
-  xprintf(".");
-  struct netbuf *inbuf;
-  err_t recv_err;
-  char *buf;
-  u16_t buflen;
-
-  /* Read the data from the port, blocking if nothing yet there. 
-   We assume the request (the part we care about) is in one netbuf */
-  recv_err = netconn_recv(conn, &inbuf);
-
-  if (recv_err == ERR_OK)
-  {
-    if (netconn_err(conn) == ERR_OK)
-    {
-      netbuf_data(inbuf, (void **)&buf, &buflen);
-      void clear_response_buffer();
-      /* Is this an HTTP GET command? is it request for machine id?*/
-      if ((buflen >= 10) && (strncmp(buf, "GET /getid", 10) == 0))
-      {
-        strcpy(response, "HTTP/1.1 200 OK\r\n\
-          Content-Type: text/html\r\n\
-          Connection: close\r\n\n"
-        );
-		    char *id = malloc(sizeof(char) * 2);
-        sprintf(id, "0%d", sensorMinId);
-		    strcat(response, id);
-		    sensorMinId += 1;
-        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
-      }
-
-      /*
-        Post the measure by get request the format is as follow 'GET /id=xx/temp=sxx.xx'
-        We will parse the temperature for the machine of given id and then add it to measurements history
-      */
-      if ((buflen >= 21) && (strncmp(buf, "GET /id=", 8) == 0))
-      {
-        for (int i = 0; i < 2; i++)
-        {
-          id[i] = buf[8 + i];
-        }
-		    sign = buf[16];
-        for (int i = 0; i < 2; i++)
-        {
-          temperatureIntegerPart[i] = buf[17 + i];
-          temperatureDecimalPart[i] = buf[20 + i];
-        }
-        id[2] = 0;
-        temperatureIntegerPart[2] = 0;
-        temperatureDecimalPart[2] = 0;
-
-        int machineId;
-        sscanf(id, "%d", &machineId);
-        int temperatureInteger;
-        sscanf(temperatureIntegerPart, "%d", &temperatureInteger);
-        int temperatureDecimal;
-        sscanf(temperatureDecimalPart, "%d", &temperatureDecimal);
-
-        double temperature;
-        if (sign == '+') 
-        {
-          temperature = temperatureInteger + (temperatureDecimal / 100);
-        }
-        else if (sign == '-')
-        {
-          temperature = - temperatureInteger - (temperatureDecimal / 100);
-        }
-        else
-        {
-          temperature = -404;
-        }
-        save_measurement(machineId - 1, temperature);
-        update_sensor_display(machineId, sign, temperatureInteger, temperatureDecimal);
-        update_plot();
-
-        response[0] = 0;
-        strcpy(response, "HTTP/1.1 200 OK\r\n\
-          Content-Type: text/html\r\n\
-          Connection: close\r\n\n\
-          Ok \r\n"
-        );
-        netconn_write(conn, response, sizeof(response), NETCONN_NOCOPY);
-      }
-    }
-  }
-  /* Close the connection (server closes in HTTP) */
-  netconn_close(conn);
-
-  /* Delete the buffer (netconn_recv gives us ownership,
-   so we have to make sure to deallocate the buffer) */
-  netbuf_delete(inbuf);
-}
-
-//based on available code examples
-static void http_server_netconn_thread(void const *arg)
-{
-  struct netconn *conn, *newconn;
-  err_t err, accept_err;
-
-  for (int i = 0; i < MAX_SENSORS; i++)
-  {
-    for (int j = 0; j < MAX_MEASUREMENTS; j++)
-    {
-      measurements[i][j] = -404;
-    }
-  }
-
-  xprintf("http_server_netconn_thread\n");
-
-  /* Create a new TCP connection handle */
-  conn = netconn_new(NETCONN_TCP);
-
-  if (conn != NULL)
-  {
-    /* Bind to port 80 (HTTP) with default IP address */
-    err = netconn_bind(conn, NULL, 80);
-
-    if (err == ERR_OK)
-    {
-      /* Put the connection into LISTEN state */
-      netconn_listen(conn);
-      while (1)
-      {
-        /* accept any icoming connection */
-        accept_err = netconn_accept(conn, &newconn);
-        if (accept_err == ERR_OK)
-        {
-          /* serve connection */
-          http_server_serve(newconn);
-
-          /* delete connection */
-          netconn_delete(newconn);
-        }
-      }
-    }
-  }
-}
 
 #define AUDIO_OUT_BUFFER_SIZE 8192
 enum
