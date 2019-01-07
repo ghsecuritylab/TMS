@@ -517,26 +517,26 @@ lub http://www.advanced-monolithic.com/pdf/ds1117.pdf)
 
 Całość systemu:
 
-![system_view][Photos/system_view.jpg]
+![system_view](Photos/system_view.jpg)
 
 Interfejs:
 
-![gui][Photos/gui1.jpg]
+![gui](Photos/gui1.jpg)
 
-![gui][Photos/gui4.jpg]
+![gui](Photos/gui4.jpg)
 
 Sensor - nodeMCU:
 
-![gui][Photos/nodemcu.jpg]
+![gui](Photos/nodemcu.jpg)
 
 Pomiary:
 
-![gui][Photos/measurements.jpg]
+![gui](Photos/measurements.jpg)
 
-![gui][Photos/cable.jpg]
+![gui](Photos/cable.jpg)
 
 Wyniki:
 
-![gui][Photos/m1.jpg]
+![gui](Photos/m1.jpg)
 
-![gui][Photos/m2.jpg]
+![gui](Photos/m2.jpg)
