@@ -1,14 +1,87 @@
 # TMS - Temperature Measure Station
 
+Ludwi Ciechański  
+Jakub Sroka
+
+github: https://github.com/Numernabis/TMS
 ## Wstęp
 
-TODO
+W ramach przeprowadzonych prac wykonano model rozproszonego systemu pomiaru temperatury w czasie rzeczywistym. Modelowany system składa się z głównej stacji pomiarowej będącej serwerem http, wyposażony w interfejs graficzny oraz obsługujący do czterech sensorów wysyłających cyklicznie pomiary. Sensory są energooszczędne i w czasie, kiedy nie prowadzą pomiarów, usypiają się na stałą długość czasu.
+
+![system_view](Photos/system_view.jpg)
 
 ## MeasureStation
 
-Nasz projekt oparliśmy o projekt startowy dla płytki STM32F746, dostępny pod adresem: http://home.agh.edu.pl/~rabw/sw/swlab.html. 
-Po odpowiednim uporządkowaniu oraz oczyszczeniu kodu z niepotrzebnych nam funkcjonalności dodaliśmy potrzebne nam funkcje. 
-Na początku zadeklarowaliśmy kilka potrzebnych nam stałych i zmiennych oraz zdefiniowaliśmy funkcje pomocnicze.
+Realizacje projektu inżynierskiego oparliśmy o projekt startowy dla płytki STM32F746G-DISCO, dostępny pod adresem: [link](http://home.agh.edu.pl/~rabw/sw/swlab.html). 
+Po odpowiednim uporządkowaniu oraz oczyszczeniu kodu z niepotrzebnych nam funkcjonalności, zaimplementowaliśmy zaplanowane. 
+Na początku zadeklarowaliśmy kilka potrzebnych nam stałych i zmiennych oraz zdefiniowaliśmy funkcje 
+pomocnicze.
+
+[kod stacji pomiarowej](#kodmeasurestation)
+
+### Serwer HTTP
+
+W projekcie startowym znajdował się już szkic serwera HTTP.
+Poniżej przedstawiamy zmiany, które zostały dokonane w istniejącym projekcie w funkcji `http_server_serve`.
+
+[kod serwera http](#kodhttp)
+
+Zgodnie z ponizszym kodem oraz zamieszczonymi w nim komentarzami, przygotowaliśmy nasz serwer do obsługi dwóch rodzajów komend: 
+
+1. GET /getid - która zwraca id dla nowo podłączonej stacji pomiarowej
+2. GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy użyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie, gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. 
+   
+Do przesłania informacji używamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
+
+
+### Interfejs graficzny 
+
+Przygotowaliśmy prosty i schludny interfejs. Mozliwe jest śledzenie do 4 sensorów(pomiary real-time).
+Dodatkowo na podstawie danych z kilku ostatnich pomiarów rysowany jest wykres prównujący pomiary róznych sensorów.
+
+[kod interfejsu graficznego](#kodinterface)
+
+![gui](Photos/gui1.jpg)
+
+![gui](Photos/gui4.jpg)
+
+## Sensor
+
+Sensory ESP8266 (nodeMCU) działają według powtarzającego się cyklu. Nowo uruchumiony sensor wysyła zapytranie do serwera http z prośbą o przydzielenie mu unikalnego adresu id. Adres ten po otrzymaniu zapisywany jest w pamięci trwałej mikroprocesora. Następnie mikroprocesor dokonuje programu, wysyła pomiar z odpowiednim adresem identyfikującym i przechodzi w stan spoczynku(deep-sleep). Po wybudzeniu następuje odczytanie id z pamięci trwałej(pamięć ulotna została wymazana) i cykl powtarza się.
+
+[kod sensora](#kodsensor)
+
+Do stworzenia oprogramowania płytki ESP8266 (nodeMCU) wykorzystaliśmy następujące przykłady:
+1. obsługa jednego lub wielusensorów DS18B20: [link 1](https://www.instructables.com/id/ESP8266-and-Multiple-Temperature-Sensors-DS18b20-W/)
+2. klient HTTP, wysyłający pomiary metodą GET: [link 2](https://circuits4you.com/2018/03/10/esp8266-http-get-request-example/)
+3. energooszczędność, z użyciem funkcji _deep-sleep_: [link 3]( https://www.losant.com/blog/making-the-esp8266-low-powered-with-deep-sleep )
+
+
+![gui](Photos/nodemcu.jpg)
+
+### Energooszczędność
+
+Podczas laboratorium wykonaliśmy pomiary średniego natężenia prądu pobieranego przez sensor (nodeMCU).
+Wyniki są następujące:
+
+1. stan pracy : 75 mA
+2. stan uśpienia : 3.1 mA
+
+![gui](Photos/m1.jpg)
+
+![gui](Photos/m2.jpg)
+
+Natomiast dla stablizatora AMS1117 3.3 LD 518, parametr _Quiescent Current_ wynosi 5 mA (dla 12 V) 
+(zgodnie z dokumentacją, źródło: [link](http://html.alldatasheet.com/html-pdf/205691/ADMOS/AMS1117-3.3/474/3/AMS1117-3.3.html)
+lub [link](http://www.advanced-monolithic.com/pdf/ds1117.pdf))
+
+![gui](Photos/measurements.jpg)
+
+![gui](Photos/cable.jpg)
+
+
+#### <a name="kodmeasurestation"> </a>
+## MeasureStation [kod programu]
 
 ```c
 #define BUFFER_SIZE 500
@@ -64,7 +137,8 @@ uint32_t choose_color(int id)
   return color;
 }
 ```
-### Interfejs graficzny
+#### <a name="kodinterface"> </a>
+### Interfejs graficzny [kod programu]
 
 ```c
 //partially based on available code examples
@@ -264,10 +338,9 @@ void clear_sensor_display(int id)
 }
 ```
 
-### Serwer HTTP
+#### <a name="kodhttp"> </a>
+### Serwer HTTP [kod programu]
 
-W projekcie startowym znajdował się już szkic serwera HTTP.
-Poniżej przedstawiamy zmiany, które zostały dokonane w istniejącym projekcie w funkcji `http_server_serve`.
 
 ```c
 //based on available code examples
@@ -366,21 +439,8 @@ static void http_server_serve(struct netconn *conn)
 }
 ```
 
-Zgodnie z powyższym kodem oraz zamieszczonymi w nim komentarzami, przygotowaliśmy nasz serwer do obsługi dwóch rodzajów komend: 
-
-1. GET /getid - która zwraca id dla nowo podłączonej stacji pomiarowej
-2. GET /id=xx/temp=sxx.xx - która pozwala na przekazanie pomiaru przy użyciu wcześniej uzyskanego id oraz pomiaru w zdefiniowanym formacie, gdzie s oznacza znak, a x jest dowolną cyfrą w systemie dziesiętnym. 
-   
-Do przesłania informacji używamy protokołu HTTP/1.1, a wiadomości przesyłane są jako text.
-
-## Sensor
-
-Do stworzenia oprogramowania płytki ESP8266 (nodeMCU) wykorzystaliśmy następujące przykłady:
-1. obsługa jednego lub wielusensorów DS18B20: https://www.instructables.com/id/ESP8266-and-Multiple-Temperature-Sensors-DS18b20-W/
-2. klient HTTP, wysyłający pomiary metodą GET: https://circuits4you.com/2018/03/10/esp8266-http-get-request-example/
-3. energooszczędność, z użyciem funkcji _deep-sleep_: https://www.losant.com/blog/making-the-esp8266-low-powered-with-deep-sleep 
-
-konfiguracja:
+#### <a name="kodsensor"> </a>
+## Sensor [kod programu]
 ```c
 /* Credentials for local WiFi */
 const char *ssid = "esp";
@@ -500,43 +560,3 @@ void loop()
  
 }
 ```
-
-### Energooszczędność
-
-Podczas laboratorium wykonaliśmy pomiary średniego natężenia prądu pobieranego przez sensor (nodeMCU).
-Wyniki są następujące:
-
-1. stan pracy : 75 mA
-2. stan uśpienia : 3.1 mA
-
-Natomiast dla stablizatora AMS1117 3.3 LD 518, parametr _Quiescent Current_ wynosi 5 mA (dla 12 V) 
-(zgodnie z dokumentacją, źródło: http://html.alldatasheet.com/html-pdf/205691/ADMOS/AMS1117-3.3/474/3/AMS1117-3.3.html
-lub http://www.advanced-monolithic.com/pdf/ds1117.pdf)
-
-## Dokumentacja fotograficzna projektu
-
-Całość systemu:
-
-![system_view](Photos/system_view.jpg)
-
-Interfejs:
-
-![gui](Photos/gui1.jpg)
-
-![gui](Photos/gui4.jpg)
-
-Sensor - nodeMCU:
-
-![gui](Photos/nodemcu.jpg)
-
-Pomiary:
-
-![gui](Photos/measurements.jpg)
-
-![gui](Photos/cable.jpg)
-
-Wyniki:
-
-![gui](Photos/m1.jpg)
-
-![gui](Photos/m2.jpg)
